@@ -4,26 +4,39 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.graphics.drawable.Drawable;
 import android.support.annotation.NonNull;
+import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
 
+import com.nineoldandroids.animation.ValueAnimator;
+
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
 import carbon.Carbon;
 import carbon.R;
+import carbon.animation.AnimatedColorStateList;
+import carbon.drawable.DefaultPrimaryColorStateList;
 import carbon.drawable.EdgeEffect;
-import carbon.drawable.TintPrimaryColorStateList;
+import carbon.drawable.RectDrawable;
+
+import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
+import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
 
 /**
  * Created by Marcin on 2015-02-28.
  */
 public class ViewPager extends android.support.v4.view.ViewPager implements TintedView {
-    private final int mTouchSlop;
+    private int mTouchSlop;
     EdgeEffect leftGlow;
     EdgeEffect rightGlow;
     private boolean drag = true;
@@ -64,9 +77,9 @@ public class ViewPager extends android.support.v4.view.ViewPager implements Tint
     }
 
     /**
+     * @param listener page changed listener
      * @deprecated Use {@link #addOnPageChangeListener(OnPageChangeListener)} instead. That method
      * allows to add more than one listener.
-     * @param listener page changed listener
      */
     @Deprecated
     @Override
@@ -76,15 +89,21 @@ public class ViewPager extends android.support.v4.view.ViewPager implements Tint
     }
 
     public ViewPager(Context context) {
-        this(context, null);
+        super(context, null);
+        initViewPager(null, R.attr.carbon_viewPagerStyle);
     }
 
     public ViewPager(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_viewPagerStyle);
+        super(context, attrs);
+        initViewPager(attrs, R.attr.carbon_viewPagerStyle);
     }
 
     public ViewPager(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs);
+        initViewPager(attrs, defStyleAttr);
+    }
+
+    private void initViewPager(AttributeSet attrs, int defStyleAttr) {
         super.setOnPageChangeListener(internalOnPageChangeListener);
 
         final ViewConfiguration configuration = ViewConfiguration.get(getContext());
@@ -100,6 +119,8 @@ public class ViewPager extends android.support.v4.view.ViewPager implements Tint
         a.recycle();
 
         Carbon.initTint(this, attrs, defStyleAttr);
+
+        initScrollbars();
     }
 
     private int getScrollRange() {
@@ -237,21 +258,44 @@ public class ViewPager extends android.support.v4.view.ViewPager implements Tint
         updateTint();
     }
 
+
     // -------------------------------
     // tint
     // -------------------------------
 
     ColorStateList tint;
+    PorterDuff.Mode tintMode;
+    ColorStateList backgroundTint;
+    PorterDuff.Mode backgroundTintMode;
+    boolean animateColorChanges;
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateTint();
+            ViewCompat.postInvalidateOnAnimation(ViewPager.this);
+        }
+    };
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateBackgroundTint();
+            ViewCompat.postInvalidateOnAnimation(ViewPager.this);
+        }
+    };
 
     @Override
     public void setTint(ColorStateList list) {
-        this.tint = list;
+        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
         updateTint();
     }
 
     @Override
     public void setTint(int color) {
-        setTint(ColorStateList.valueOf(color));
+        if (color == 0) {
+            setTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setTint(ColorStateList.valueOf(color));
+        }
     }
 
     @Override
@@ -261,12 +305,266 @@ public class ViewPager extends android.support.v4.view.ViewPager implements Tint
 
     private void updateTint() {
         if (tint == null)
-            tint = new TintPrimaryColorStateList(getContext());
+            return;
         int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
         if (leftGlow != null)
             leftGlow.setColor(color);
         if (rightGlow != null)
             rightGlow.setColor(color);
-        postInvalidate();
+        /*if (topGlow != null)
+            topGlow.setColor(color);
+        if (bottomGlow != null)
+            bottomGlow.setColor(color);*/
+        scrollBarDrawable = null;
+    }
+
+    @Override
+    public void setTintMode(@NonNull PorterDuff.Mode mode) {
+        this.tintMode = mode;
+        updateTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getTintMode() {
+        return tintMode;
+    }
+
+    @Override
+    public void setBackgroundTint(ColorStateList list) {
+        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public void setBackgroundTint(int color) {
+        if (color == 0) {
+            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setBackgroundTint(ColorStateList.valueOf(color));
+        }
+    }
+
+    @Override
+    public ColorStateList getBackgroundTint() {
+        return backgroundTint;
+    }
+
+    private void updateBackgroundTint() {
+        if (getBackground() == null)
+            return;
+        if (backgroundTint != null && backgroundTintMode != null) {
+            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
+            getBackground().setColorFilter(new PorterDuffColorFilter(color, tintMode));
+        } else {
+            getBackground().setColorFilter(null);
+        }
+    }
+
+    @Override
+    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+        this.backgroundTintMode = mode;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getBackgroundTintMode() {
+        return backgroundTintMode;
+    }
+
+    public boolean isAnimateColorChangesEnabled() {
+        return animateColorChanges;
+    }
+
+    public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        this.animateColorChanges = animateColorChanges;
+        if (tint != null && !(tint instanceof AnimatedColorStateList))
+            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
+        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
+            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+    }
+
+
+    // -------------------------------
+    // scroll bars
+    // -------------------------------
+
+    Drawable scrollBarDrawable;
+
+    private void initScrollbars() {
+        try {
+            Field mScrollCacheField = View.class.getDeclaredField("mScrollCache");
+            mScrollCacheField.setAccessible(true);
+            Object mScrollCache = mScrollCacheField.get(this);
+
+            if (mScrollCache == null)
+                return;
+
+            Field scrollBarField = mScrollCache.getClass().getDeclaredField("scrollBar");
+            scrollBarField.setAccessible(true);
+            Object scrollBar = scrollBarField.get(mScrollCache);
+
+            Field mVerticalThumbField = scrollBar.getClass().getDeclaredField("mVerticalThumb");
+            mVerticalThumbField.setAccessible(true);
+            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
+            mVerticalThumbField.set(scrollBar, scrollBarDrawable);
+
+            Field mHorizontalThumbField = scrollBar.getClass().getDeclaredField("mHorizontalThumb");
+            mHorizontalThumbField.setAccessible(true);
+            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
+            mHorizontalThumbField.set(scrollBar, scrollBarDrawable);
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    // -------------------------------
+    // transformations
+    // -------------------------------
+
+    public float getAlpha() {
+        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    }
+
+    public void setAlpha(float alpha) {
+        if (NEEDS_PROXY) {
+            wrap(this).setAlpha(alpha);
+        } else {
+            super.setAlpha(alpha);
+        }
+    }
+
+    public float getPivotX() {
+        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    }
+
+    public void setPivotX(float pivotX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotX(pivotX);
+        } else {
+            super.setPivotX(pivotX);
+        }
+    }
+
+    public float getPivotY() {
+        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
+    }
+
+    public void setPivotY(float pivotY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotY(pivotY);
+        } else {
+            super.setPivotY(pivotY);
+        }
+    }
+
+    public float getRotation() {
+        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
+    }
+
+    public void setRotation(float rotation) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotation(rotation);
+        } else {
+            super.setRotation(rotation);
+        }
+    }
+
+    public float getRotationX() {
+        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
+    }
+
+    public void setRotationX(float rotationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationX(rotationX);
+        } else {
+            super.setRotationX(rotationX);
+        }
+    }
+
+    public float getRotationY() {
+        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
+    }
+
+    public void setRotationY(float rotationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationY(rotationY);
+        } else {
+            super.setRotationY(rotationY);
+        }
+    }
+
+    public float getScaleX() {
+        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    }
+
+    public void setScaleX(float scaleX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleX(scaleX);
+        } else {
+            super.setScaleX(scaleX);
+        }
+    }
+
+    public float getScaleY() {
+        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
+    }
+
+    public void setScaleY(float scaleY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleY(scaleY);
+        } else {
+            super.setScaleY(scaleY);
+        }
+    }
+
+    public float getTranslationX() {
+        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    }
+
+    public void setTranslationX(float translationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationX(translationX);
+        } else {
+            super.setTranslationX(translationX);
+        }
+    }
+
+    public float getTranslationY() {
+        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
+    }
+
+    public void setTranslationY(float translationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationY(translationY);
+        } else {
+            super.setTranslationY(translationY);
+        }
+    }
+
+    public float getX() {
+        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
+    }
+
+    public void setX(float x) {
+        if (NEEDS_PROXY) {
+            wrap(this).setX(x);
+        } else {
+            super.setX(x);
+        }
+    }
+
+    public float getY() {
+        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    }
+
+    public void setY(float y) {
+        if (NEEDS_PROXY) {
+            wrap(this).setY(y);
+        } else {
+            super.setY(y);
+        }
     }
 }

@@ -2,12 +2,14 @@ package tk.zielony.carbonsamples;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.os.Handler;
+import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.LinearLayoutManager;
 import android.view.View;
 
+import carbon.Carbon;
+import carbon.internal.DebugOverlay;
+import carbon.widget.ImageView;
 import carbon.widget.RecyclerView;
-import carbon.widget.Toolbar;
 
 public class MainActivity extends Activity {
 
@@ -16,33 +18,20 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        final Handler handler = new Handler();
-
-        final Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        toolbar.setText(R.string.app_name);
-        toolbar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                toolbar.findViewById(R.id.icon1).setVisibility(View.GONE);
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        toolbar.findViewById(R.id.icon2).setVisibility(View.GONE);
-                    }
-                }, 100);
-            }
-        });
+        Samples.initToolbar(this,getString(R.string.app_name));
 
         RecyclerView recyclerView = (RecyclerView) findViewById(R.id.list);
         ViewModel[] items = new ViewModel[]{
-                new ViewModel(WidgetsActivity.class, "Widgets"),
-                new ViewModel(FeaturesActivity.class, "Features"),
-                new ViewModel(AnimationsActivity.class, "Animations"),
-                new ViewModel(AppsLibrariesActivity.class, "Apps & Libraries"),
-                new ViewModel(DemosActivity.class, "Demos"),
-                new ViewModel(GuidelinesActivity.class, "Guidelines")
+                new ViewModel(WidgetsActivity.class, getString(R.string.widgetsActivity_title)),
+                new ViewModel(FeaturesActivity.class, getString(R.string.featuresActivity_title)),
+                new ViewModel(AnimationsActivity.class, getString(R.string.animationsActivity_title)),
+                new ViewModel(AppsLibrariesActivity.class, getString(R.string.appsLibrariesActivity_title)),
+                new ViewModel(DemosActivity.class, getString(R.string.demosActivity_title)),
+                new ViewModel(GuidelinesActivity.class, getString(R.string.guidelinesActivity_title))
         };
-        recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+        recyclerView.setLayoutManager(getResources().getBoolean(R.bool.tablet) ?
+                new GridLayoutManager(this, 2, LinearLayoutManager.VERTICAL, false) :
+                new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         recyclerView.setAdapter(new MainListAdapter(items));
     }
 

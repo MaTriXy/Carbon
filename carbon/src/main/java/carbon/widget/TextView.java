@@ -1,11 +1,14 @@
 package carbon.widget;
 
+import android.annotation.TargetApi;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -13,84 +16,120 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.annotation.NonNull;
+import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewOutlineProvider;
+import android.view.animation.Animation;
+import android.view.animation.Transformation;
 
 import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.AnimatorListenerAdapter;
 import com.nineoldandroids.animation.ValueAnimator;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import carbon.Carbon;
 import carbon.R;
 import carbon.animation.AnimUtils;
+import carbon.animation.AnimatedColorStateList;
 import carbon.animation.AnimatedView;
 import carbon.animation.StateAnimator;
+import carbon.drawable.DefaultColorStateList;
 import carbon.drawable.EmptyDrawable;
-import carbon.drawable.RippleDrawable;
-import carbon.drawable.RippleView;
+import carbon.drawable.ripple.RippleDrawable;
+import carbon.drawable.ripple.RippleView;
 import carbon.internal.TypefaceUtils;
 import carbon.shadow.Shadow;
 import carbon.shadow.ShadowGenerator;
 import carbon.shadow.ShadowShape;
 import carbon.shadow.ShadowView;
 
+import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
+import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
+
 /**
  * Created by Marcin on 2014-11-07.
  */
-public class TextView extends android.widget.TextView implements ShadowView, RippleView, TouchMarginView, AnimatedView, CornerView {
-    Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+public class TextView extends android.widget.TextView implements ShadowView, RippleView, TouchMarginView, StateAnimatorView, AnimatedView, CornerView, TintedView {
+    protected Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     public TextView(Context context) {
-        this(context, null);
+        super(context, null);
+        initTextView(null, android.R.attr.textViewStyle);
     }
 
     public TextView(Context context, AttributeSet attrs) {
-        this(context, attrs, android.R.attr.textViewStyle);
+        super(context, attrs);
+        initTextView(attrs, android.R.attr.textViewStyle);
     }
 
-    public TextView(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-        init(attrs, defStyle);
+    public TextView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initTextView(attrs, defStyleAttr);
     }
 
-    public void init(AttributeSet attrs, int defStyleAttr) {
-        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.TextView, defStyleAttr, 0);
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public TextView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        initTextView(attrs, defStyleAttr);
+    }
 
-        int ap = a.getResourceId(R.styleable.TextView_android_textAppearance, -1);
-        if (ap != -1)
-            setTextAppearanceInternal(ap);
+    private void initTextView(AttributeSet attrs, int defStyleAttr) {
+        if (isInEditMode())
+            return;
 
-        for (int i = 0; i < a.getIndexCount(); i++) {
-            int attr = a.getIndex(i);
-            if (attr == R.styleable.TextView_carbon_textAllCaps) {
-                setAllCaps(a.getBoolean(attr, false));
-            } else if (!isInEditMode()&&attr == R.styleable.TextView_carbon_fontPath) {
-                String path = a.getString(attr);
-                Typeface typeface = TypefaceUtils.getTypeface(getContext(), path);
-                setTypeface(typeface);
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.TextView, defStyleAttr, 0);
+
+            int ap = a.getResourceId(R.styleable.TextView_android_textAppearance, -1);
+            if (ap != -1)
+                setTextAppearanceInternal(ap);
+
+            for (int i = 0; i < a.getIndexCount(); i++) {
+                int attr = a.getIndex(i);
+                if (attr == R.styleable.TextView_carbon_textAllCaps) {
+                    setAllCaps(a.getBoolean(attr, false));
+                } else if (!isInEditMode() && attr == R.styleable.TextView_carbon_fontPath) {
+                    String path = a.getString(attr);
+                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), path);
+                    setTypeface(typeface);
+                } else if (attr == R.styleable.TextView_carbon_fontFamily) {
+                    int textStyle = a.getInt(R.styleable.TextView_android_textStyle, 0);
+                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), a.getString(attr), textStyle);
+                    setTypeface(typeface);
+                }
             }
+
+            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
+            Carbon.initTint(this, attrs, defStyleAttr);
+            Carbon.initElevation(this, attrs, defStyleAttr);
+            Carbon.initAnimations(this, attrs, defStyleAttr);
+            Carbon.initTouchMargin(this, attrs, defStyleAttr);
+            setCornerRadius((int) a.getDimension(R.styleable.TextView_carbon_cornerRadius, 0));
+
+            a.recycle();
         }
 
-        setCornerRadius((int) a.getDimension(R.styleable.TextView_carbon_cornerRadius, 0));
-
-        a.recycle();
-
-        Carbon.initRippleDrawable(this, attrs, defStyleAttr);
-        Carbon.initAnimations(this, attrs, defStyleAttr);
-        Carbon.initTouchMargin(this, attrs, defStyleAttr);
+        if (getElevation() > 0)
+            AnimUtils.setupElevationAnimator(stateAnimator, this);
     }
 
+    /**
+     * Changes text transformation method to caps.
+     *
+     * @param allCaps if true, Button will automatically capitalize all characters
+     */
     public void setAllCaps(boolean allCaps) {
         if (allCaps) {
             setTransformationMethod(new AllCapsTransformationMethod(getContext()));
         } else {
             setTransformationMethod(null);
         }
+    }
+
+    @Override
+    public void setTextColor(ColorStateList colors) {
+        super.setTextColor(animateColorChanges && !(colors instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(colors, textColorAnimatorListener) : colors);
     }
 
     @Override
@@ -111,34 +150,17 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
                 int attr = appearance.getIndex(i);
                 if (attr == R.styleable.TextAppearance_carbon_textAllCaps) {
                     setAllCaps(appearance.getBoolean(R.styleable.TextAppearance_carbon_textAllCaps, true));
-                } else if (!isInEditMode()&&attr == R.styleable.TextAppearance_carbon_fontPath) {
+                } else if (!isInEditMode() && attr == R.styleable.TextAppearance_carbon_fontPath) {
                     String path = appearance.getString(attr);
                     Typeface typeface = TypefaceUtils.getTypeface(getContext(), path);
+                    setTypeface(typeface);
+                } else if (attr == R.styleable.TextAppearance_carbon_fontFamily) {
+                    int textStyle = appearance.getInt(R.styleable.TextAppearance_android_textStyle, 0);
+                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), appearance.getString(attr), textStyle);
                     setTypeface(typeface);
                 }
             }
             appearance.recycle();
-        }
-    }
-
-    @Override
-    public void draw(@NonNull Canvas canvas) {
-        if (cornerRadius > 0 && getWidth() > 0 && getHeight() > 0 && Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
-            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
-
-            super.draw(canvas);
-            if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
-                rippleDrawable.draw(canvas);
-
-            paint.setXfermode(pdMode);
-            canvas.drawPath(cornersMask, paint);
-
-            canvas.restoreToCount(saveCount);
-            paint.setXfermode(null);
-        } else {
-            super.draw(canvas);
-            if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
-                rippleDrawable.draw(canvas);
         }
     }
 
@@ -205,6 +227,27 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
         }
     }
 
+    @Override
+    public void draw(@NonNull Canvas canvas) {
+        if (cornerRadius > 0 && getWidth() > 0 && getHeight() > 0 && Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            super.draw(canvas);
+            if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+                rippleDrawable.draw(canvas);
+
+            paint.setXfermode(pdMode);
+            canvas.drawPath(cornersMask, paint);
+
+            canvas.restoreToCount(saveCount);
+            paint.setXfermode(null);
+        } else {
+            super.draw(canvas);
+            if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+                rippleDrawable.draw(canvas);
+        }
+    }
+
 
     // -------------------------------
     // ripple
@@ -212,9 +255,17 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
 
     private RippleDrawable rippleDrawable;
     private EmptyDrawable emptyBackground = new EmptyDrawable();
+    private Transformation t = new Transformation();
 
     @Override
     public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        Animation a = getAnimation();
+        if (a != null) {
+            a.getTransformation(event.getEventTime(), t);
+            float[] loc = new float[]{event.getX(), event.getY()};
+            t.getMatrix().mapPoints(loc);
+            event.setLocation(loc[0], loc[1]);
+        }
         if (rippleDrawable != null && event.getAction() == MotionEvent.ACTION_DOWN)
             rippleDrawable.setHotspot(event.getX(), event.getY());
         return super.dispatchTouchEvent(event);
@@ -225,6 +276,7 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
         return rippleDrawable;
     }
 
+    @Override
     public void setRippleDrawable(RippleDrawable newRipple) {
         if (rippleDrawable != null) {
             rippleDrawable.setCallback(null);
@@ -234,9 +286,9 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
 
         if (newRipple != null) {
             newRipple.setCallback(this);
-            if (newRipple.getStyle() == RippleDrawable.Style.Background) {
+            newRipple.setBounds(0, 0, getWidth(), getHeight());
+            if (newRipple.getStyle() == RippleDrawable.Style.Background)
                 super.setBackgroundDrawable((Drawable) newRipple);
-            }
         }
 
         rippleDrawable = newRipple;
@@ -368,6 +420,7 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
             rippleDrawable = null;
         }
         super.setBackgroundDrawable(background == null ? emptyBackground : background);
+        updateTint();
     }
 
 
@@ -422,7 +475,6 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
     @Override
     public void setEnabled(boolean enabled) {
         super.setEnabled(enabled);
-        setTranslationZ(enabled ? 0 : -elevation);
     }
 
     @Override
@@ -493,14 +545,11 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
     // state animators
     // -------------------------------
 
-    private List<StateAnimator> stateAnimators = new ArrayList<>();
+    private StateAnimator stateAnimator = new StateAnimator(this);
 
-    public void removeStateAnimator(StateAnimator animator) {
-        stateAnimators.remove(animator);
-    }
-
-    public void addStateAnimator(StateAnimator animator) {
-        this.stateAnimators.add(animator);
+    @Override
+    public StateAnimator getStateAnimator() {
+        return stateAnimator;
     }
 
     @Override
@@ -508,9 +557,15 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
         super.drawableStateChanged();
         if (rippleDrawable != null && rippleDrawable.getStyle() != RippleDrawable.Style.Background)
             rippleDrawable.setState(getDrawableState());
-        if (stateAnimators != null)
-            for (StateAnimator animator : stateAnimators)
-                animator.stateChanged(getDrawableState());
+        if (stateAnimator != null)
+            stateAnimator.setState(getDrawableState());
+        ColorStateList textColors = getTextColors();
+        if (textColors instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) textColors).setState(getDrawableState());
+        if (tint != null && tint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) tint).setState(getDrawableState());
+        if (backgroundTint != null && backgroundTint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) backgroundTint).setState(getDrawableState());
     }
 
 
@@ -518,7 +573,7 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
     // animations
     // -------------------------------
 
-    private AnimUtils.Style inAnim, outAnim;
+    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
     private Animator animator;
 
     public void setVisibility(final int visibility) {
@@ -576,5 +631,308 @@ public class TextView extends android.widget.TextView implements ShadowView, Rip
 
     public void setInAnimation(AnimUtils.Style inAnim) {
         this.inAnim = inAnim;
+    }
+
+
+    // -------------------------------
+    // tint
+    // -------------------------------
+
+    ColorStateList tint;
+    PorterDuff.Mode tintMode;
+    ColorStateList backgroundTint;
+    PorterDuff.Mode backgroundTintMode;
+    boolean animateColorChanges;
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateTint();
+            ViewCompat.postInvalidateOnAnimation(TextView.this);
+        }
+    };
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateBackgroundTint();
+            ViewCompat.postInvalidateOnAnimation(TextView.this);
+        }
+    };
+    ValueAnimator.AnimatorUpdateListener textColorAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            setHintTextColor(getHintTextColors());
+        }
+    };
+
+    @Override
+    public void setTint(ColorStateList list) {
+        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
+        updateTint();
+    }
+
+    @Override
+    public void setTint(int color) {
+        if (color == 0) {
+            setTint(new DefaultColorStateList(getContext()));
+        } else {
+            setTint(ColorStateList.valueOf(color));
+        }
+    }
+
+    @Override
+    public ColorStateList getTint() {
+        return tint;
+    }
+
+    private void updateTint() {
+        Drawable[] drawables = getCompoundDrawables();
+        if (tint != null && tintMode != null) {
+            int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
+            for (Drawable d : drawables)
+                if (d != null)
+                    d.setColorFilter(new PorterDuffColorFilter(color, tintMode));
+        } else {
+            for (Drawable d : drawables)
+                if (d != null)
+                    d.setColorFilter(null);
+        }
+    }
+
+    @Override
+    public void setTintMode(@NonNull PorterDuff.Mode mode) {
+        this.tintMode = mode;
+        updateTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getTintMode() {
+        return tintMode;
+    }
+
+    @Override
+    public void setBackgroundTint(ColorStateList list) {
+        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public void setBackgroundTint(int color) {
+        if (color == 0) {
+            setBackgroundTint(new DefaultColorStateList(getContext()));
+        } else {
+            setBackgroundTint(ColorStateList.valueOf(color));
+        }
+    }
+
+    @Override
+    public ColorStateList getBackgroundTint() {
+        return backgroundTint;
+    }
+
+    private void updateBackgroundTint() {
+        if (getBackground() == null)
+            return;
+        if (backgroundTint != null && backgroundTintMode != null) {
+            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
+            getBackground().setColorFilter(new PorterDuffColorFilter(color, backgroundTintMode));
+        } else {
+            getBackground().setColorFilter(null);
+        }
+    }
+
+    @Override
+    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+        this.backgroundTintMode = mode;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getBackgroundTintMode() {
+        return backgroundTintMode;
+    }
+
+    public boolean isAnimateColorChangesEnabled() {
+        return animateColorChanges;
+    }
+
+    public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        this.animateColorChanges = animateColorChanges;
+        if (tint != null && !(tint instanceof AnimatedColorStateList))
+            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
+        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
+            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+        if (!(getTextColors() instanceof AnimatedColorStateList))
+            setTextColor(AnimatedColorStateList.fromList(getTextColors(), textColorAnimatorListener));
+    }
+
+
+    // -------------------------------
+    // transformations
+    // -------------------------------
+
+    public float getAlpha() {
+        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    }
+
+    public void setAlpha(float alpha) {
+        if (NEEDS_PROXY) {
+            wrap(this).setAlpha(alpha);
+        } else {
+            super.setAlpha(alpha);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotX() {
+        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    }
+
+    public void setPivotX(float pivotX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotX(pivotX);
+        } else {
+            super.setPivotX(pivotX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotY() {
+        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
+    }
+
+    public void setPivotY(float pivotY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotY(pivotY);
+        } else {
+            super.setPivotY(pivotY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotation() {
+        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
+    }
+
+    public void setRotation(float rotation) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotation(rotation);
+        } else {
+            super.setRotation(rotation);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationX() {
+        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
+    }
+
+    public void setRotationX(float rotationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationX(rotationX);
+        } else {
+            super.setRotationX(rotationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationY() {
+        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
+    }
+
+    public void setRotationY(float rotationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationY(rotationY);
+        } else {
+            super.setRotationY(rotationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleX() {
+        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    }
+
+    public void setScaleX(float scaleX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleX(scaleX);
+        } else {
+            super.setScaleX(scaleX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleY() {
+        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
+    }
+
+    public void setScaleY(float scaleY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleY(scaleY);
+        } else {
+            super.setScaleY(scaleY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationX() {
+        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    }
+
+    public void setTranslationX(float translationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationX(translationX);
+        } else {
+            super.setTranslationX(translationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationY() {
+        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
+    }
+
+    public void setTranslationY(float translationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationY(translationY);
+        } else {
+            super.setTranslationY(translationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getX() {
+        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
+    }
+
+    public void setX(float x) {
+        if (NEEDS_PROXY) {
+            wrap(this).setX(x);
+        } else {
+            super.setX(x);
+        }
+    }
+
+    public float getY() {
+        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    }
+
+    public void setY(float y) {
+        if (NEEDS_PROXY) {
+            wrap(this).setY(y);
+        } else {
+            super.setY(y);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
     }
 }

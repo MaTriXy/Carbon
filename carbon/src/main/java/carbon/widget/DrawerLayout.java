@@ -34,54 +34,54 @@ import carbon.R;
 import carbon.animation.AnimUtils;
 import carbon.animation.AnimatedView;
 import carbon.animation.StateAnimator;
-import carbon.animation.StateAnimatorView;
 import carbon.drawable.EmptyDrawable;
-import carbon.drawable.RippleDrawable;
-import carbon.drawable.RippleView;
+import carbon.drawable.ripple.RippleDrawable;
+import carbon.drawable.ripple.RippleView;
 import carbon.internal.ElevationComparator;
+import carbon.internal.MatrixHelper;
 import carbon.shadow.Shadow;
 import carbon.shadow.ShadowGenerator;
 import carbon.shadow.ShadowShape;
 import carbon.shadow.ShadowView;
 
+import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
+import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
+
 /**
  * Created by Marcin on 2015-04-01.
- *
+ * <p/>
  * Carbon version of a drawer layout with support for shadows, ripples and other material features.
  * Not really useful, but added for sake of completeness.
  */
 public class DrawerLayout extends android.support.v4.widget.DrawerLayout implements ShadowView, RippleView, TouchMarginView, StateAnimatorView, AnimatedView, InsetView, CornerView {
-    private boolean debugMode;
+    private OnTouchListener onDispatchTouchListener;
 
     public DrawerLayout(Context context) {
-        this(context, null);
+        super(context, null, R.attr.carbon_drawerLayoutStyle);
+        initDrawerLayout(null, R.attr.carbon_drawerLayoutStyle);
     }
 
     public DrawerLayout(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_drawerLayoutStyle);
+        super(context, attrs, R.attr.carbon_drawerLayoutStyle);
+        initDrawerLayout(attrs, R.attr.carbon_drawerLayoutStyle);
     }
 
     public DrawerLayout(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init(attrs, defStyleAttr);
+        initDrawerLayout(attrs, defStyleAttr);
     }
 
-    private void init(AttributeSet attrs, int defStyleAttr) {
-        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.DrawerLayout, defStyleAttr, 0);
-        Carbon.initRippleDrawable(this, attrs, defStyleAttr);
+    private void initDrawerLayout(AttributeSet attrs, int defStyleAttr) {
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.DrawerLayout, defStyleAttr, 0);
+            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
 
-        setElevation(a.getDimension(R.styleable.DrawerLayout_carbon_elevation, 0));
+            Carbon.initElevation(this, attrs, defStyleAttr);
+            Carbon.initAnimations(this, attrs, defStyleAttr);
+            Carbon.initTouchMargin(this, attrs, defStyleAttr);
+            Carbon.initInset(this, attrs, defStyleAttr);
+            setCornerRadius((int) a.getDimension(R.styleable.DrawerLayout_carbon_cornerRadius, 0));
 
-        Carbon.initAnimations(this, attrs, defStyleAttr);
-        Carbon.initTouchMargin(this, attrs, defStyleAttr);
-        Carbon.initInset(this, attrs, defStyleAttr);
-        setCornerRadius((int) a.getDimension(R.styleable.DrawerLayout_carbon_cornerRadius, 0));
-
-        a.recycle();
-
-        if (isInEditMode()) {
-            a = getContext().obtainStyledAttributes(attrs, R.styleable.Carbon, defStyleAttr, 0);
-            debugMode = a.getBoolean(R.styleable.Carbon_carbon_debugMode, false);
             a.recycle();
         }
 
@@ -118,9 +118,6 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
             if (insetBottom != 0)
                 canvas.drawRect(0, getHeight() - insetBottom, getWidth(), getHeight(), paint);
         }
-
-        if (debugMode)
-            Carbon.drawDebugInfo(this, canvas);
     }
 
     @Override
@@ -136,26 +133,11 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
 
                 float childElevation = shadowView.getElevation() + shadowView.getTranslationZ();
 
-                float[] childLocation = new float[]{(child.getLeft() + child.getRight()) / 2, (child.getTop() + child.getBottom()) / 2};
-                Matrix matrix = carbon.internal.ViewHelper.getMatrix(child);
-                matrix.mapPoints(childLocation);
-
-                int[] location = new int[2];
-                getLocationOnScreen(location);
-                float x = childLocation[0] + location[0];
-                float y = childLocation[1] + location[1];
-                x -= getRootView().getWidth() / 2;
-                y += getRootView().getHeight() / 2;   // looks nice
-                float length = (float) Math.sqrt(x * x + y * y);
-
                 int saveCount = canvas.save(Canvas.MATRIX_SAVE_FLAG);
-                canvas.translate(
-                        x / length * childElevation / 2,
-                        y / length * childElevation / 2);
-                canvas.translate(
-                        child.getLeft(),
-                        child.getTop());
+                canvas.translate(0, childElevation / 2);
+                canvas.translate(child.getLeft(), child.getTop());
 
+                Matrix matrix = MatrixHelper.getMatrix(child);
                 canvas.concat(matrix);
                 shadow.draw(canvas, child, paint);
                 canvas.restoreToCount(saveCount);
@@ -269,6 +251,14 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
 
     @Override
     public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        views = new ArrayList<>();
+        for (int i = 0; i < getChildCount(); i++)
+            views.add(getChildAt(i));
+        Collections.sort(views, new ElevationComparator());
+
+        if (onDispatchTouchListener != null && onDispatchTouchListener.onTouch(this, event))
+            return true;
+
         if (rippleDrawable != null && event.getAction() == MotionEvent.ACTION_DOWN)
             rippleDrawable.setHotspot(event.getX(), event.getY());
         return super.dispatchTouchEvent(event);
@@ -288,9 +278,9 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
 
         if (newRipple != null) {
             newRipple.setCallback(this);
-            if (newRipple.getStyle() == RippleDrawable.Style.Background) {
+            newRipple.setBounds(0, 0, getWidth(), getHeight());
+            if (newRipple.getStyle() == RippleDrawable.Style.Background)
                 super.setBackgroundDrawable((Drawable) newRipple);
-            }
         }
 
         rippleDrawable = newRipple;
@@ -444,7 +434,7 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
             super.setElevation(elevation);
         this.elevation = elevation;
-        if (getParent() != null)
+        if (getParent() != null && getParent() instanceof View)
             ((View) getParent()).postInvalidate();
     }
 
@@ -459,7 +449,7 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
             super.setTranslationZ(translationZ);
         this.translationZ = translationZ;
-        if (getParent() != null)
+        if (getParent() != null && getParent() instanceof View)
             ((View) getParent()).postInvalidate();
     }
 
@@ -475,7 +465,6 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
     @Override
     public void setEnabled(boolean enabled) {
         super.setEnabled(enabled);
-        setTranslationZ(enabled ? 0 : -elevation);
     }
 
     @Override
@@ -545,14 +534,11 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
     // state animators
     // -------------------------------
 
-    private List<StateAnimator> stateAnimators = new ArrayList<>();
+    private StateAnimator stateAnimator = new StateAnimator(this);
 
-    public void removeStateAnimator(StateAnimator animator) {
-        stateAnimators.remove(animator);
-    }
-
-    public void addStateAnimator(StateAnimator animator) {
-        this.stateAnimators.add(animator);
+    @Override
+    public StateAnimator getStateAnimator() {
+        return stateAnimator;
     }
 
     @Override
@@ -560,9 +546,8 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
         super.drawableStateChanged();
         if (rippleDrawable != null && rippleDrawable.getStyle() != RippleDrawable.Style.Background)
             rippleDrawable.setState(getDrawableState());
-        if (stateAnimators != null)
-            for (StateAnimator animator : stateAnimators)
-                animator.stateChanged(getDrawableState());
+        if (stateAnimator != null)
+            stateAnimator.setState(getDrawableState());
     }
 
 
@@ -570,7 +555,7 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
     // animations
     // -------------------------------
 
-    private AnimUtils.Style inAnim, outAnim;
+    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
     private Animator animator;
 
     public void setVisibility(final int visibility) {
@@ -606,7 +591,7 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
         }
     }
 
-    public void setVisibilityImmediate(final int visibility){
+    public void setVisibilityImmediate(final int visibility) {
         super.setVisibility(visibility);
     }
 
@@ -709,8 +694,12 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
 
 
     // -------------------------------
-    // ViewGroup utils
+    // View utils
     // -------------------------------
+
+    public void setOnDispatchTouchListener(OnTouchListener onDispatchTouchListener) {
+        this.onDispatchTouchListener = onDispatchTouchListener;
+    }
 
     public List<View> findViewsById(int id) {
         List<View> result = new ArrayList<>();
@@ -746,4 +735,174 @@ public class DrawerLayout extends android.support.v4.widget.DrawerLayout impleme
         return result;
     }
 
+
+    // -------------------------------
+    // transformations
+    // -------------------------------
+
+    public float getAlpha() {
+        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    }
+
+    public void setAlpha(float alpha) {
+        if (NEEDS_PROXY) {
+            wrap(this).setAlpha(alpha);
+        } else {
+            super.setAlpha(alpha);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotX() {
+        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    }
+
+    public void setPivotX(float pivotX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotX(pivotX);
+        } else {
+            super.setPivotX(pivotX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotY() {
+        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
+    }
+
+    public void setPivotY(float pivotY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotY(pivotY);
+        } else {
+            super.setPivotY(pivotY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotation() {
+        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
+    }
+
+    public void setRotation(float rotation) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotation(rotation);
+        } else {
+            super.setRotation(rotation);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationX() {
+        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
+    }
+
+    public void setRotationX(float rotationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationX(rotationX);
+        } else {
+            super.setRotationX(rotationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationY() {
+        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
+    }
+
+    public void setRotationY(float rotationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationY(rotationY);
+        } else {
+            super.setRotationY(rotationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleX() {
+        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    }
+
+    public void setScaleX(float scaleX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleX(scaleX);
+        } else {
+            super.setScaleX(scaleX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleY() {
+        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
+    }
+
+    public void setScaleY(float scaleY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleY(scaleY);
+        } else {
+            super.setScaleY(scaleY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationX() {
+        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    }
+
+    public void setTranslationX(float translationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationX(translationX);
+        } else {
+            super.setTranslationX(translationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationY() {
+        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
+    }
+
+    public void setTranslationY(float translationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationY(translationY);
+        } else {
+            super.setTranslationY(translationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getX() {
+        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
+    }
+
+    public void setX(float x) {
+        if (NEEDS_PROXY) {
+            wrap(this).setX(x);
+        } else {
+            super.setX(x);
+        }
+    }
+
+    public float getY() {
+        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    }
+
+    public void setY(float y) {
+        if (NEEDS_PROXY) {
+            wrap(this).setY(y);
+        } else {
+            super.setY(y);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
 }

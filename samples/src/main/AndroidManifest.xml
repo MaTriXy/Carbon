@@ -11,6 +11,7 @@
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
+        android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
             android:name="tk.zielony.carbonsamples.MainActivity"
@@ -34,9 +35,6 @@
             android:name=".widget.TextFieldsActivity"
             android:label="@string/app_name" />
         <activity
-            android:name=".widget.DialogActivity"
-            android:label="@string/app_name" />
-        <activity
             android:name=".widget.CircularProgressActivity"
             android:label="@string/app_name" />
         <activity
@@ -58,6 +56,9 @@
             android:name=".widget.RecyclerActivity"
             android:label="@string/app_name" />
         <activity
+            android:name=".widget.ExpandableRecyclerActivity"
+            android:label="@string/app_name" />
+        <activity
             android:name=".widget.SpinnerActivity"
             android:label="@string/app_name" />
         <activity
@@ -68,6 +69,21 @@
             android:label="@string/app_name" />
         <activity
             android:name=".widget.ToolbarActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".widget.FlowLayoutActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".widget.TableLayoutActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".widget.FloatingActionMenuActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".widget.BottomBarActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".widget.BottomSheetActivity"
             android:label="@string/app_name" />
 
         <activity
@@ -83,7 +99,7 @@
             android:name=".animation.RippleActivity"
             android:label="@string/app_name" />
         <activity
-            android:name=".animation.AnimationsActivity"
+            android:name=".animation.WidgetAnimationsActivity"
             android:label="@string/app_name" />
         <activity
             android:name=".animation.ListRippleActivity"
@@ -113,6 +129,12 @@
         <activity
             android:name=".feature.ContextWrapperActivity"
             android:label="@string/app_name" />
+        <activity
+            android:name=".feature.PercentLayoutActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".feature.TextMarkerActivity"
+            android:label="@string/app_name" />
 
         <activity
             android:name=".applibrary.DrawerActivity"
@@ -125,6 +147,9 @@
             android:label="@string/app_name" />
         <activity
             android:name=".applibrary.CalculatorActivity"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".applibrary.DesignActivity"
             android:label="@string/app_name" />
 
         <activity

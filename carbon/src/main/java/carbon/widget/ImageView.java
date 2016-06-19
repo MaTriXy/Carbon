@@ -1,10 +1,10 @@
 package carbon.widget;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
@@ -15,6 +15,7 @@ import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.annotation.NonNull;
+import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -27,23 +28,24 @@ import com.nineoldandroids.animation.AnimatorListenerAdapter;
 import com.nineoldandroids.animation.ValueAnimator;
 import com.nineoldandroids.view.ViewHelper;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import carbon.Carbon;
 import carbon.R;
 import carbon.animation.AnimUtils;
+import carbon.animation.AnimatedColorStateList;
 import carbon.animation.AnimatedView;
 import carbon.animation.StateAnimator;
-import carbon.animation.StateAnimatorView;
+import carbon.drawable.DefaultPrimaryColorStateList;
 import carbon.drawable.EmptyDrawable;
-import carbon.drawable.RippleDrawable;
-import carbon.drawable.RippleView;
 import carbon.drawable.VectorDrawable;
+import carbon.drawable.ripple.RippleDrawable;
+import carbon.drawable.ripple.RippleView;
 import carbon.shadow.Shadow;
 import carbon.shadow.ShadowGenerator;
 import carbon.shadow.ShadowShape;
 import carbon.shadow.ShadowView;
+
+import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
+import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
 
 /**
  * Created by Marcin on 2015-01-22.
@@ -52,38 +54,55 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     public ImageView(Context context) {
-        this(context, null);
+        super(context, null, R.attr.carbon_imageViewStyle);
+        initImageView(null, R.attr.carbon_imageViewStyle);
     }
 
     public ImageView(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_imageViewStyle);
+        super(context, attrs, R.attr.carbon_imageViewStyle);
+        initImageView(attrs, R.attr.carbon_imageViewStyle);
     }
 
-    public ImageView(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-        init(attrs, defStyle);
+    public ImageView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initImageView(attrs, defStyleAttr);
     }
 
-    private void init(AttributeSet attrs, int defStyleAttr) {
-        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.ImageView, defStyleAttr, 0);
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public ImageView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        initImageView(attrs, defStyleAttr);
+    }
 
-        setElevation(a.getDimension(R.styleable.ImageView_carbon_elevation, 0));
-        int resId = a.getResourceId(R.styleable.ImageView_android_src, 0);
-        int resId2 = a.getResourceId(R.styleable.ImageView_carbon_src, 0);
-        if (resId == 0)
-            resId = resId2;
-        if (resId != 0 && !isInEditMode() && getContext().getResources().getResourceTypeName(resId).equals("raw"))
-            setImageDrawable(new VectorDrawable(getResources(), resId));
-        setEnabled(a.getBoolean(R.styleable.ImageView_android_enabled, true));
+    private void initImageView(AttributeSet attrs, int defStyleAttr) {
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.ImageView, defStyleAttr, 0);
 
-        setCornerRadius((int) a.getDimension(R.styleable.ImageView_carbon_cornerRadius, 0));
+            for (int i = 0; i < a.getIndexCount(); i++) {
+                int attr = a.getIndex(i);
+                if (attr == R.styleable.ImageView_android_src) {
+                    int resId = a.getResourceId(attr, 0);
+                    if (resId != 0 && !isInEditMode() && getContext().getResources().getResourceTypeName(resId).equals("raw"))
+                        setImageDrawable(new VectorDrawable(getResources(), resId));
+                } else if (attr == R.styleable.ImageView_carbon_src) {
+                    int resId = a.getResourceId(R.styleable.ImageView_carbon_src, 0);
+                    if (resId != 0 && !isInEditMode() && getContext().getResources().getResourceTypeName(resId).equals("raw"))
+                        setImageDrawable(new VectorDrawable(getResources(), resId));
+                } else if (attr == R.styleable.ImageView_android_enabled) {
+                    setEnabled(a.getBoolean(attr, true));
+                } else if (attr == R.styleable.ImageView_carbon_cornerRadius) {
+                    setCornerRadius((int) a.getDimension(attr, 0));
+                }
+            }
 
-        Carbon.initRippleDrawable(this, attrs, defStyleAttr);
-        Carbon.initAnimations(this, attrs, defStyleAttr);
-        Carbon.initTouchMargin(this, attrs, defStyleAttr);
-        Carbon.initTint(this, attrs, defStyleAttr);
+            a.recycle();
 
-        a.recycle();
+            Carbon.initElevation(this, attrs, defStyleAttr);
+            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
+            Carbon.initAnimations(this, attrs, defStyleAttr);
+            Carbon.initTouchMargin(this, attrs, defStyleAttr);
+            Carbon.initTint(this, attrs, defStyleAttr);
+        }
     }
 
     @Override
@@ -103,10 +122,20 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     private Path cornersMask;
     private static PorterDuffXfermode pdMode = new PorterDuffXfermode(PorterDuff.Mode.CLEAR);
 
+    /**
+     * Gets the corner radius. If corner radius is equal to 0, rounded corners are turned off. Shadows work faster when corner radius is less than 2.5dp.
+     *
+     * @return corner radius, equal to or greater than 0.
+     */
     public int getCornerRadius() {
         return cornerRadius;
     }
 
+    /**
+     * Sets the corner radius. If corner radius is equal to 0, rounded corners are turned off. Shadows work faster when corner radius is less than 2.5dp.
+     *
+     * @param cornerRadius
+     */
     public void setCornerRadius(int cornerRadius) {
         this.cornerRadius = cornerRadius;
         invalidateShadow();
@@ -199,6 +228,7 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
         return rippleDrawable;
     }
 
+    @Override
     public void setRippleDrawable(RippleDrawable newRipple) {
         if (rippleDrawable != null) {
             rippleDrawable.setCallback(null);
@@ -208,9 +238,9 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
 
         if (newRipple != null) {
             newRipple.setCallback(this);
-            if (newRipple.getStyle() == RippleDrawable.Style.Background) {
+            newRipple.setBounds(0, 0, getWidth(), getHeight());
+            if (newRipple.getStyle() == RippleDrawable.Style.Background)
                 super.setBackgroundDrawable((Drawable) newRipple);
-            }
         }
 
         rippleDrawable = newRipple;
@@ -342,6 +372,7 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
             rippleDrawable = null;
         }
         super.setBackgroundDrawable(background == null ? emptyBackground : background);
+        updateTint();
     }
 
 
@@ -358,6 +389,7 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
         return elevation;
     }
 
+    @Override
     public synchronized void setElevation(float elevation) {
         if (elevation == this.elevation)
             return;
@@ -395,7 +427,6 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     @Override
     public void setEnabled(boolean enabled) {
         super.setEnabled(enabled);
-        setTranslationZ(enabled ? 0 : -elevation);
     }
 
     @Override
@@ -483,29 +514,29 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
         }
     }
 
+
     // -------------------------------
     // state animators
     // -------------------------------
 
-    private List<StateAnimator> stateAnimators = new ArrayList<>();
+    private StateAnimator stateAnimator = new StateAnimator(this);
 
-    public void removeStateAnimator(StateAnimator animator) {
-        stateAnimators.remove(animator);
-    }
-
-    public void addStateAnimator(StateAnimator animator) {
-        this.stateAnimators.add(animator);
+    @Override
+    public StateAnimator getStateAnimator() {
+        return stateAnimator;
     }
 
     @Override
     protected void drawableStateChanged() {
         super.drawableStateChanged();
-        updateTint();
         if (rippleDrawable != null && rippleDrawable.getStyle() != RippleDrawable.Style.Background)
             rippleDrawable.setState(getDrawableState());
-        if (stateAnimators != null)
-            for (StateAnimator animator : stateAnimators)
-                animator.stateChanged(getDrawableState());
+        if (stateAnimator != null)
+            stateAnimator.setState(getDrawableState());
+        if (tint != null && tint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) tint).setState(getDrawableState());
+        if (backgroundTint != null && backgroundTint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) backgroundTint).setState(getDrawableState());
     }
 
 
@@ -513,7 +544,7 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     // animations
     // -------------------------------
 
-    private AnimUtils.Style inAnim, outAnim;
+    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
     private Animator animator;
 
     public void setVisibility(final int visibility) {
@@ -579,17 +610,38 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     // -------------------------------
 
     ColorStateList tint;
+    PorterDuff.Mode tintMode;
+    ColorStateList backgroundTint;
+    PorterDuff.Mode backgroundTintMode;
+    boolean animateColorChanges;
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateTint();
+            ViewCompat.postInvalidateOnAnimation(ImageView.this);
+        }
+    };
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateBackgroundTint();
+            ViewCompat.postInvalidateOnAnimation(ImageView.this);
+       }
+    };
 
     @Override
     public void setTint(ColorStateList list) {
-        this.tint = list;
+        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
         updateTint();
-        postInvalidate();
     }
 
     @Override
     public void setTint(int color) {
-        setTint(ColorStateList.valueOf(color));
+        if (color == 0) {
+            setTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setTint(ColorStateList.valueOf(color));
+        }
     }
 
     @Override
@@ -598,13 +650,247 @@ public class ImageView extends android.widget.ImageView implements ShadowView, R
     }
 
     private void updateTint() {
-        if (tint != null) {
+        if (tint != null && tintMode != null) {
             int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
-            setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_ATOP));
-            setAlpha(Color.alpha(color));
+            setColorFilter(new PorterDuffColorFilter(color, tintMode));
         } else {
             setColorFilter(null);
-            setAlpha(255);
         }
+    }
+
+    @Override
+    public void setTintMode(@NonNull PorterDuff.Mode mode) {
+        this.tintMode = mode;
+        updateTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getTintMode() {
+        return tintMode;
+    }
+
+    @Override
+    public void setBackgroundTint(ColorStateList list) {
+        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public void setBackgroundTint(int color) {
+        if (color == 0) {
+            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setBackgroundTint(ColorStateList.valueOf(color));
+        }
+    }
+
+    @Override
+    public ColorStateList getBackgroundTint() {
+        return backgroundTint;
+    }
+
+    private void updateBackgroundTint() {
+        if (getBackground() == null)
+            return;
+        if (backgroundTint != null && backgroundTintMode != null) {
+            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
+            getBackground().setColorFilter(new PorterDuffColorFilter(color, backgroundTintMode));
+        } else {
+            getBackground().setColorFilter(null);
+        }
+    }
+
+    @Override
+    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+        this.backgroundTintMode = mode;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getBackgroundTintMode() {
+        return backgroundTintMode;
+    }
+
+    public boolean isAnimateColorChangesEnabled() {
+        return animateColorChanges;
+    }
+
+    public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        this.animateColorChanges = animateColorChanges;
+        if (tint != null && !(tint instanceof AnimatedColorStateList))
+            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
+        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
+            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+    }
+
+
+    // -------------------------------
+    // transformations
+    // -------------------------------
+
+    public float getAlpha() {
+        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    }
+
+    public void setAlpha(float alpha) {
+        if (NEEDS_PROXY) {
+            wrap(this).setAlpha(alpha);
+        } else {
+            super.setAlpha(alpha);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotX() {
+        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    }
+
+    public void setPivotX(float pivotX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotX(pivotX);
+        } else {
+            super.setPivotX(pivotX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getPivotY() {
+        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
+    }
+
+    public void setPivotY(float pivotY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setPivotY(pivotY);
+        } else {
+            super.setPivotY(pivotY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotation() {
+        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
+    }
+
+    public void setRotation(float rotation) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotation(rotation);
+        } else {
+            super.setRotation(rotation);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationX() {
+        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
+    }
+
+    public void setRotationX(float rotationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationX(rotationX);
+        } else {
+            super.setRotationX(rotationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getRotationY() {
+        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
+    }
+
+    public void setRotationY(float rotationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setRotationY(rotationY);
+        } else {
+            super.setRotationY(rotationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleX() {
+        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    }
+
+    public void setScaleX(float scaleX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleX(scaleX);
+        } else {
+            super.setScaleX(scaleX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getScaleY() {
+        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
+    }
+
+    public void setScaleY(float scaleY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setScaleY(scaleY);
+        } else {
+            super.setScaleY(scaleY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationX() {
+        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    }
+
+    public void setTranslationX(float translationX) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationX(translationX);
+        } else {
+            super.setTranslationX(translationX);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getTranslationY() {
+        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
+    }
+
+    public void setTranslationY(float translationY) {
+        if (NEEDS_PROXY) {
+            wrap(this).setTranslationY(translationY);
+        } else {
+            super.setTranslationY(translationY);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
+    }
+
+    public float getX() {
+        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
+    }
+
+    public void setX(float x) {
+        if (NEEDS_PROXY) {
+            wrap(this).setX(x);
+        } else {
+            super.setX(x);
+        }
+    }
+
+    public float getY() {
+        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    }
+
+    public void setY(float y) {
+        if (NEEDS_PROXY) {
+            wrap(this).setY(y);
+        } else {
+            super.setY(y);
+        }
+        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
+            ((View) getParent()).invalidate();
     }
 }

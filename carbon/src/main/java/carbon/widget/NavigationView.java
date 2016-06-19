@@ -11,6 +11,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import carbon.CarbonContextWrapper;
 import carbon.R;
 
 /**
@@ -20,24 +21,26 @@ public class NavigationView extends RecyclerView {
     private Menu menu;
 
     public NavigationView(Context context) {
-        this(context, null);
+        super(context);
+        initNavigationView();
     }
 
     public NavigationView(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_navigationViewStyle);
+        super(context, attrs);
+        initNavigationView();
     }
 
     public NavigationView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init();
+        initNavigationView();
     }
 
-    private void init() {
+    private void initNavigationView() {
         setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.VERTICAL, false));
     }
 
     public void setMenu(int resId) {
-        Menu menu = new MenuBuilder(getContext());
+        Menu menu = new MenuBuilder(new CarbonContextWrapper(getContext()));
         MenuInflater inflater = new MenuInflater(getContext());
         inflater.inflate(resId, menu);
         setMenu(menu);
@@ -55,11 +58,10 @@ public class NavigationView extends RecyclerView {
         return menu;
     }
 
-    public static class Adapter extends RecyclerView.Adapter<ViewHolder, MenuItem> {
+    public static class Adapter extends RecyclerView.Adapter<ViewHolder> {
 
         private Menu items = null;
 
-        @Override
         public MenuItem getItem(int position) {
             return items.getItem(position);
         }
@@ -73,7 +75,6 @@ public class NavigationView extends RecyclerView {
 
         @Override
         public void onBindViewHolder(ViewHolder holder, final int position) {
-            super.onBindViewHolder(holder, position);
             holder.tv.setText(items.getItem(position).getTitle());
             holder.iv.setImageDrawable(items.getItem(position).getIcon());
         }

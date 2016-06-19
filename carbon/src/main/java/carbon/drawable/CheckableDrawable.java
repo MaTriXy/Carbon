@@ -5,18 +5,19 @@ import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.ColorFilter;
-import android.graphics.LightingColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.NonNull;
+import android.util.Log;
 
 import com.caverock.androidsvg.SVG;
 import com.caverock.androidsvg.SVGParseException;
@@ -42,22 +43,15 @@ public class CheckableDrawable extends Drawable {
     float radius;
     private boolean checked;
 
-    int checkedColor = 0;
-    LightingColorFilter checkedFilter;
-    int checkedAlpha;
-
-    int uncheckedColor = 0;
-    LightingColorFilter uncheckedFilter;
-    int uncheckedAlpha;
-
-    int disabledColor = 0;
-    LightingColorFilter disabledFilter;
-    int disabledAlpha;
+    PorterDuffColorFilter checkedFilter;
+    PorterDuffColorFilter uncheckedFilter;
+    PorterDuffColorFilter disabledFilter;
 
     long downTime;
     private BitmapShader checkedShader, filledShader;
     private PointF offset;
-    private ColorStateList color;
+    private ColorStateList tint;
+    PorterDuff.Mode tintMode;
 
     public CheckableDrawable(Context context, int checkedRes, int uncheckedRes, int filledRes, PointF offset) {
         this.context = context;
@@ -72,14 +66,17 @@ public class CheckableDrawable extends Drawable {
 
     @Override
     public void setBounds(Rect bounds) {
+        if (!getBounds().equals(bounds))
+            checkedBitmap = uncheckedBitmap = filledBitmap = null;
         super.setBounds(bounds);
-        checkedBitmap = uncheckedBitmap = filledBitmap = null;
     }
 
     @Override
     public void setBounds(int left, int top, int right, int bottom) {
+        Rect bounds = getBounds();
+        if (bounds.left != left || bounds.right != right || bounds.bottom != bottom || bounds.top != top)
+            checkedBitmap = uncheckedBitmap = filledBitmap = null;
         super.setBounds(left, top, right, bottom);
-        checkedBitmap = uncheckedBitmap = filledBitmap = null;
     }
 
     private void renderSVGs() {
@@ -127,7 +124,8 @@ public class CheckableDrawable extends Drawable {
             maskCanvas = new Canvas(maskBitmap);
             radius = (float) (Math.sqrt(2) * bounds.width() / 2);
         } catch (SVGParseException e) {
-        } catch (NullPointerException e) {
+            Log.e(CheckableDrawable.class.getSimpleName(), "There was an error parsing SVG");
+        } catch (NullPointerException e) {  // TODO: what is this catch for?
         }
     }
 
@@ -145,7 +143,6 @@ public class CheckableDrawable extends Drawable {
             if (checked && checkedBitmap != null) {
                 if (delta < CHECK_DURATION) {
                     paint.setColorFilter(uncheckedFilter);
-                    paint.setAlpha(uncheckedAlpha);
                     canvas.drawBitmap(uncheckedBitmap, bounds.left, bounds.top, paint);
 
                     maskCanvas.drawColor(0xffffffff);
@@ -157,7 +154,6 @@ public class CheckableDrawable extends Drawable {
                 } else {
                     paint.setShader(null);
                     paint.setColorFilter(uncheckedFilter);
-                    paint.setAlpha(uncheckedAlpha);
                     canvas.drawBitmap(uncheckedBitmap, bounds.left, bounds.top, paint);
 
                     maskCanvas.drawColor(0xffffffff);
@@ -169,14 +165,12 @@ public class CheckableDrawable extends Drawable {
 
                     paint.setShader(checkedShader);
                     paint.setColorFilter(checkedFilter);
-                    paint.setAlpha(checkedAlpha);
                     canvas.drawCircle(bounds.centerX() + bounds.width() * offset.x, bounds.centerY() + bounds.height() * offset.y, (delta - CHECK_DURATION) / FILL_DURATION * radius, paint);
                 }
             } else if (!checked && uncheckedBitmap != null) {
                 if (delta < CHECK_DURATION) {
                     paint.setShader(null);
                     paint.setColorFilter(uncheckedFilter);
-                    paint.setAlpha(uncheckedAlpha);
                     canvas.drawBitmap(uncheckedBitmap, bounds.left, bounds.top, paint);
 
                     maskCanvas.drawColor(0xffffffff);
@@ -188,11 +182,9 @@ public class CheckableDrawable extends Drawable {
 
                     paint.setShader(checkedShader);
                     paint.setColorFilter(checkedFilter);
-                    paint.setAlpha(checkedAlpha);
                     canvas.drawCircle(bounds.centerX() + bounds.width() * offset.x, bounds.centerY() + bounds.height() * offset.y, (1 - delta / FILL_DURATION) * radius, paint);
                 } else {
                     paint.setColorFilter(uncheckedFilter);
-                    paint.setAlpha(uncheckedAlpha);
                     canvas.drawBitmap(uncheckedBitmap, bounds.left, bounds.top, paint);
 
                     maskCanvas.drawColor(0xffffffff);
@@ -207,11 +199,9 @@ public class CheckableDrawable extends Drawable {
         } else {
             if (checked && checkedBitmap != null) {
                 paint.setColorFilter(checkedFilter);
-                paint.setAlpha(checkedAlpha);
                 canvas.drawBitmap(checkedBitmap, bounds.left, bounds.top, paint);
             } else if (!checked && uncheckedBitmap != null) {
                 paint.setColorFilter(uncheckedFilter);
-                paint.setAlpha(uncheckedAlpha);
                 canvas.drawBitmap(uncheckedBitmap, bounds.left, bounds.top, paint);
             }
         }
@@ -260,7 +250,7 @@ public class CheckableDrawable extends Drawable {
 
     @Override
     public int getIntrinsicWidth() {
-        return (int) (context.getResources().getDimension(R.dimen.carbon_1dip) * 24);
+        return context.getResources().getDimensionPixelSize(R.dimen.carbon_iconSize);
     }
 
     @Override
@@ -269,51 +259,40 @@ public class CheckableDrawable extends Drawable {
     }
 
     @Override
+    public Rect getDirtyBounds() {
+        return super.getDirtyBounds();
+    }
+
+    @Override
     public boolean isStateful() {
         return true;
     }
 
-    public int getCheckedColor() {
-        return checkedColor;
+    public void setTint(ColorStateList list) {
+        this.tint = list;
+        updateTint();
     }
 
-    public void setCheckedColor(int checkedColor) {
-        this.checkedColor = checkedColor;
-        checkedFilter = new LightingColorFilter(0, checkedColor);
-        checkedAlpha = Color.alpha(checkedColor);
+    public ColorStateList getTint() {
+        return tint;
+    }
+
+    @Override
+    public void setTintMode(@NonNull PorterDuff.Mode mode) {
+        this.tintMode = mode;
+        updateTint();
+    }
+
+    private void updateTint() {
+        if (tint == null || tintMode == null) {
+            checkedFilter = null;
+            uncheckedFilter = null;
+            disabledFilter = null;
+        } else {
+            checkedFilter = new PorterDuffColorFilter(tint.getColorForState(new int[]{android.R.attr.state_checked}, tint.getDefaultColor()), tintMode);
+            uncheckedFilter = new PorterDuffColorFilter(tint.getColorForState(new int[]{-android.R.attr.state_checked}, tint.getDefaultColor()), tintMode);
+            disabledFilter = new PorterDuffColorFilter(tint.getColorForState(new int[]{-android.R.attr.state_enabled}, tint.getDefaultColor()), tintMode);
+        }
         invalidateSelf();
-    }
-
-    public int getUncheckedColor() {
-        return uncheckedColor;
-    }
-
-    public void setUncheckedColor(int uncheckedColor) {
-        this.uncheckedColor = uncheckedColor;
-        uncheckedFilter = new LightingColorFilter(0, uncheckedColor);
-        uncheckedAlpha = Color.alpha(uncheckedColor);
-        invalidateSelf();
-    }
-
-    public int getDisabledColor() {
-        return disabledColor;
-    }
-
-    public void setDisabledColor(int disabledColor) {
-        this.disabledColor = disabledColor;
-        disabledFilter = new LightingColorFilter(0, disabledColor);
-        disabledAlpha = Color.alpha(disabledColor);
-        invalidateSelf();
-    }
-
-    public void setColor(ColorStateList colorStateList) {
-        this.color = colorStateList;
-        setCheckedColor(color.getColorForState(new int[]{android.R.attr.state_checked}, color.getDefaultColor()));
-        setUncheckedColor(color.getColorForState(new int[]{-android.R.attr.state_checked}, color.getDefaultColor()));
-        setDisabledColor(color.getColorForState(new int[]{-android.R.attr.state_enabled}, color.getDefaultColor()));
-    }
-
-    public ColorStateList getColor() {
-        return color;
     }
 }

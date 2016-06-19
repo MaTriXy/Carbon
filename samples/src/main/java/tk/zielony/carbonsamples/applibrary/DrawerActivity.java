@@ -8,8 +8,6 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.widget.LinearLayoutManager;
-import android.view.View;
-import android.widget.AdapterView;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,16 +32,16 @@ public class DrawerActivity extends Activity {
         setContentView(R.layout.activity_drawer);
 
         toolbar = (Toolbar) findViewById(R.id.toolbar);
-        toolbar.setText(R.string.app_name);
+        toolbar.setTitle(R.string.app_name);
 
         drawerLayout = (DrawerLayout) findViewById(R.id.drawerLayout);
         drawerMenu = (LinearLayout) findViewById(R.id.drawerMenu);
         RecyclerView drawerList = (RecyclerView) findViewById(R.id.drawerList);
         drawerList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
 
-        FruitAdapter adapter = new FruitAdapter(fruits);
+        FruitAdapter adapter = new FruitAdapter(fruits,null);
         drawerList.setAdapter(adapter);
-        adapter.setOnItemClickedListener(new OnItemClickedListener() {
+        drawerList.setOnItemClickedListener(new OnItemClickedListener() {
             @Override
             public void onItemClicked(int position) {
                 setTitle(fruits.get(position));

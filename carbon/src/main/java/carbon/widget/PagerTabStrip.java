@@ -1,14 +1,19 @@
 package carbon.widget;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.v4.view.PagerAdapter;
+import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.View;
@@ -21,11 +26,13 @@ import com.nineoldandroids.view.ViewHelper;
 
 import carbon.Carbon;
 import carbon.R;
+import carbon.animation.AnimatedColorStateList;
+import carbon.drawable.DefaultPrimaryColorStateList;
 
 /**
  * Created by Marcin on 2015-02-26.
  */
-public class PagerTabStrip extends android.widget.HorizontalScrollView implements TintedView {
+public class PagerTabStrip extends android.widget.HorizontalScrollView implements TintedView {  // TODO: extend carbon.widget.HorizontalScrollView
     ViewPager viewPager;
     private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     LinearLayout content;
@@ -41,9 +48,11 @@ public class PagerTabStrip extends android.widget.HorizontalScrollView implement
     private ViewPager.OnPageChangeListener pageChangeListener = new ViewPager.OnPageChangeListener() {
         @Override
         public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-            position = (int) Math.round(position + positionOffset);
+            position = Math.round(position + positionOffset);
             if (position != selectedPage) {
                 View view = content.getChildAt(position);
+                if (view == null)
+                    return; // TODO: what's really going on here? #130
 
                 if (animator != null)
                     animator.cancel();
@@ -100,25 +109,35 @@ public class PagerTabStrip extends android.widget.HorizontalScrollView implement
     private TabBuilder tabBuilder;
 
     public PagerTabStrip(Context context) {
-        this(context, null);
+        super(context, null, R.attr.carbon_pagerTabStripStyle);
+        initPagerTabStrip(null, R.attr.carbon_pagerTabStripStyle);
     }
 
     public PagerTabStrip(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_pagerTabStripStyle);
+        super(context, attrs, R.attr.carbon_pagerTabStripStyle);
+        initPagerTabStrip(attrs, R.attr.carbon_pagerTabStripStyle);
     }
 
     public PagerTabStrip(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        init(attrs, defStyleAttr);
+        initPagerTabStrip(attrs, defStyleAttr);
     }
 
-    private void init(AttributeSet attrs, int defStyleAttr) {
-        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.PagerTabStrip, defStyleAttr, 0);
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public PagerTabStrip(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        initPagerTabStrip(attrs, defStyleAttr);
+    }
 
-        setIndicatorHeight(a.getDimension(R.styleable.PagerTabStrip_carbon_indicatorWidth, 2));
-        setFixed(a.getBoolean(R.styleable.PagerTabStrip_carbon_fixedTabs, true));
+    private void initPagerTabStrip(AttributeSet attrs, int defStyleAttr) {
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.PagerTabStrip, defStyleAttr, 0);
 
-        a.recycle();
+            setIndicatorHeight(a.getDimension(R.styleable.PagerTabStrip_carbon_indicatorWidth, 2));
+            setFixed(a.getBoolean(R.styleable.PagerTabStrip_carbon_fixedTabs, true));
+
+            a.recycle();
+        }
 
         setHorizontalFadingEdgeEnabled(false);
         setHorizontalScrollBarEnabled(false);
@@ -324,20 +343,123 @@ public class PagerTabStrip extends android.widget.HorizontalScrollView implement
     // -------------------------------
 
     ColorStateList tint;
+    PorterDuff.Mode tintMode;
+    ColorStateList backgroundTint;
+    PorterDuff.Mode backgroundTintMode;
+    boolean animateColorChanges;
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateTint();
+            ViewCompat.postInvalidateOnAnimation(PagerTabStrip.this);
+        }
+    };
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            updateBackgroundTint();
+            ViewCompat.postInvalidateOnAnimation(PagerTabStrip.this);
+        }
+    };
 
     @Override
     public void setTint(ColorStateList list) {
-        this.tint = list;
-        postInvalidate();
+        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
+        updateTint();
     }
 
     @Override
     public void setTint(int color) {
-        setTint(ColorStateList.valueOf(color));
+        if (color == 0) {
+            setTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setTint(ColorStateList.valueOf(color));
+        }
     }
 
     @Override
     public ColorStateList getTint() {
         return tint;
     }
+
+    private void updateTint() {
+        if (tint == null)
+            return;
+        int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
+        /*if (leftGlow != null)
+            leftGlow.setColor(color);
+        if (rightGlow != null)
+            rightGlow.setColor(color);
+        if (topGlow != null)
+            topGlow.setColor(color);
+        if (bottomGlow != null)
+            bottomGlow.setColor(color);
+        scrollBarDrawable = null;*/
+    }
+
+    @Override
+    public void setTintMode(@NonNull PorterDuff.Mode mode) {
+        this.tintMode = mode;
+        updateTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getTintMode() {
+        return tintMode;
+    }
+
+    @Override
+    public void setBackgroundTint(ColorStateList list) {
+        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public void setBackgroundTint(int color) {
+        if (color == 0) {
+            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
+        } else {
+            setBackgroundTint(ColorStateList.valueOf(color));
+        }
+    }
+
+    @Override
+    public ColorStateList getBackgroundTint() {
+        return backgroundTint;
+    }
+
+    private void updateBackgroundTint() {
+        if (getBackground() == null)
+            return;
+        if (backgroundTint != null && backgroundTintMode != null) {
+            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
+            getBackground().setColorFilter(new PorterDuffColorFilter(color, tintMode));
+        } else {
+            getBackground().setColorFilter(null);
+        }
+    }
+
+    @Override
+    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+        this.backgroundTintMode = mode;
+        updateBackgroundTint();
+    }
+
+    @Override
+    public PorterDuff.Mode getBackgroundTintMode() {
+        return backgroundTintMode;
+    }
+
+    public boolean isAnimateColorChangesEnabled() {
+        return animateColorChanges;
+    }
+
+    public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        this.animateColorChanges = animateColorChanges;
+        if (tint != null && !(tint instanceof AnimatedColorStateList))
+            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
+        if (backgroundTint!= null && !(backgroundTint instanceof AnimatedColorStateList))
+            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+    }
+
 }

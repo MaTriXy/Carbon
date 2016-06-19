@@ -2,13 +2,11 @@ package tk.zielony.carbonsamples.widget;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
+import android.view.ViewGroup;
 
 import carbon.widget.CheckBox;
 import carbon.widget.FloatingActionButton;
-import carbon.widget.SVGActionButton;
 import carbon.widget.Snackbar;
 import tk.zielony.carbonsamples.R;
 
@@ -26,6 +24,7 @@ public class SnackbarActivity extends Activity {
         final CheckBox swipeCheckBox = (CheckBox) findViewById(R.id.swipe);
         final CheckBox floatingCheckBox = (CheckBox) findViewById(R.id.floating);
         final CheckBox infiniteCheckBox = (CheckBox) findViewById(R.id.infinite);
+        final CheckBox pushCheckBox = (CheckBox) findViewById(R.id.push);
         final FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
 
         findViewById(R.id.button).setOnClickListener(new View.OnClickListener() {
@@ -35,16 +34,18 @@ public class SnackbarActivity extends Activity {
                 snackbar.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        snackbar.hide();
+                        snackbar.dismiss();
                     }
                 });
                 snackbar.setStyle(floatingCheckBox.isChecked() ? Snackbar.Style.Floating : Snackbar.Style.Docked);
                 snackbar.setTapOutsideToDismissEnabled(tapCheckBox.isChecked());
                 snackbar.setSwipeToDismissEnabled(swipeCheckBox.isChecked());
-                snackbar.show(fab);
-                snackbar.setOnDismissedListener(new Snackbar.OnDismissedListener() {
+                if (pushCheckBox.isChecked())
+                    snackbar.addPushedView(fab);
+                snackbar.show((ViewGroup) getWindow().getDecorView().getRootView());
+                snackbar.setOnDismissListener(new Snackbar.OnDismissListener() {
                     @Override
-                    public void onDismissed() {
+                    public void onDismiss() {
                     }
                 });
             }

@@ -1,18 +1,19 @@
 package carbon.widget;
 
+import android.annotation.TargetApi;
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LightingColorFilter;
 import android.graphics.drawable.BitmapDrawable;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.util.AttributeSet;
-import android.util.TypedValue;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,35 +25,43 @@ import com.caverock.androidsvg.SVGParseException;
 
 import carbon.Carbon;
 import carbon.R;
-import carbon.drawable.ControlFocusedColorStateList;
+import carbon.internal.SpinnerMenu;
 
 /**
  * Created by Marcin on 2015-06-11.
  */
-public class Spinner extends TextView implements TintedView {
-    PopupMenu popupMenu;
-    private int selectedItem;
+public class Spinner extends EditText {
+    SpinnerMenu spinnerMenu;
+    private int selectedIndex;
     Adapter defaultAdapter;
     AdapterView.OnItemSelectedListener onItemSelectedListener;
 
     private boolean isShowingPopup = false;
 
     public Spinner(Context context) {
-        this(context, null);
+        super(context, null, R.attr.carbon_spinnerStyle);
+        initSpinner(context, null, R.attr.carbon_spinnerStyle);
     }
 
     public Spinner(Context context, AttributeSet attrs) {
-        this(context, attrs, R.attr.carbon_spinnerStyle);
+        super(context, attrs, R.attr.carbon_spinnerStyle);
+        initSpinner(context, attrs, R.attr.carbon_spinnerStyle);
     }
 
-    public Spinner(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
+    public Spinner(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initSpinner(context, attrs, defStyleAttr);
+    }
 
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public Spinner(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        initSpinner(context, attrs, defStyleAttr);
+    }
+
+    private void initSpinner(Context context, AttributeSet attrs, int defStyleAttr) {
         try {
-            Resources.Theme theme = context.getTheme();
-            TypedValue typedvalueattr = new TypedValue();
-            theme.resolveAttribute(R.attr.colorControlNormal, typedvalueattr, true);
-            int color = typedvalueattr.resourceId != 0 ? context.getResources().getColor(typedvalueattr.resourceId) : typedvalueattr.data;
+            int color = Carbon.getThemeColor(context, R.attr.colorControlNormal);
 
             int size = (int) (Carbon.getDip(getContext()) * 24);
             Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
@@ -74,11 +83,21 @@ public class Spinner extends TextView implements TintedView {
 
         }
 
-        popupMenu = new PopupMenu(context);
+        int theme = 0;
+        if (attrs != null) {
+            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.Spinner, defStyleAttr, 0);
+
+            theme = a.getResourceId(R.styleable.Spinner_carbon_popupTheme, -1);
+
+            a.recycle();
+        }
+
+        spinnerMenu = new SpinnerMenu(new ContextThemeWrapper(context, theme));
+        spinnerMenu.setOnItemClickedListener(onItemClickedListener);
+
         defaultAdapter = new Adapter();
-        popupMenu.setAdapter(defaultAdapter);
-        popupMenu.setTint(getTint());
-        popupMenu.setOnDismissListener(new PopupWindow.OnDismissListener() {
+        spinnerMenu.setAdapter(defaultAdapter);
+        spinnerMenu.setOnDismissListener(new PopupWindow.OnDismissListener() {
             @Override
             public void onDismiss() {
                 isShowingPopup = false;
@@ -88,38 +107,43 @@ public class Spinner extends TextView implements TintedView {
         setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                popupMenu.show(Spinner.this);
+                spinnerMenu.show(Spinner.this);
                 isShowingPopup = true;
             }
         });
     }
 
+    public void setSelectedIndex(int index) {
+        selectedIndex = index;
+        if (getAdapter() != null)
+            setText(getAdapter().getItem(index).toString());
+    }
+
     public int getSelectedIndex() {
-        return selectedItem;
+        return selectedIndex;
     }
 
     public void setAdapter(final RecyclerView.Adapter adapter) {
         if (adapter == null) {
-            popupMenu.setAdapter(defaultAdapter);
-            defaultAdapter.setOnItemClickedListener(onItemClickedListener);
+            spinnerMenu.setAdapter(defaultAdapter);
         } else {
-            popupMenu.setAdapter(adapter);
-            adapter.setOnItemClickedListener(onItemClickedListener);
+            spinnerMenu.setAdapter(adapter);
         }
+        setText(getAdapter().getItem(selectedIndex).toString());
     }
 
-    public RecyclerView.Adapter getAdapter() {
-        return popupMenu.getAdapter();
+    public RecyclerView.ArrayAdapter getAdapter() {
+        return spinnerMenu.getAdapter();
     }
 
     RecyclerView.OnItemClickedListener onItemClickedListener = new RecyclerView.OnItemClickedListener() {
         @Override
         public void onItemClicked(int position) {
-            setText(popupMenu.getAdapter().getItem(position).toString());
-            selectedItem = position;
-            if(onItemSelectedListener!=null)
-                onItemSelectedListener.onItemSelected(null,null,selectedItem,0);
-            popupMenu.dismiss();
+            setText(spinnerMenu.getAdapter().getItem(position).toString());
+            selectedIndex = position;
+            if (onItemSelectedListener != null)
+                onItemSelectedListener.onItemSelected(null, null, selectedIndex, 0);
+            spinnerMenu.dismiss();
         }
     };
 
@@ -128,42 +152,23 @@ public class Spinner extends TextView implements TintedView {
     }
 
     public void setItems(String[] items) {
-        popupMenu.setAdapter(defaultAdapter);
-        defaultAdapter.setOnItemClickedListener(onItemClickedListener);
+        spinnerMenu.setAdapter(defaultAdapter);
         defaultAdapter.setItems(items);
+        defaultAdapter.notifyDataSetChanged();
     }
 
-    public static class Adapter extends RecyclerView.Adapter<ViewHolder, String> {
-
-        private String[] items = new String[0];
-
-        @Override
-        public String getItem(int position) {
-            return items[position];
-        }
+    public static class Adapter extends RecyclerView.ArrayAdapter<ViewHolder, String> {
 
         @Override
         public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
             LayoutInflater inflater = LayoutInflater.from(parent.getContext());
-            View view = inflater.inflate(R.layout.carbon_popup_row, parent, false);
+            View view = inflater.inflate(R.layout.carbon_popupmenu_item, parent, false);
             return new ViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(ViewHolder holder, final int position) {
-            super.onBindViewHolder(holder, position);
             holder.tv.setText(items[position]);
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.length;
-        }
-
-
-        public void setItems(String[] items) {
-            this.items = items;
-            notifyDataSetChanged();
         }
     }
 
@@ -180,8 +185,11 @@ public class Spinner extends TextView implements TintedView {
     protected boolean setFrame(int l, int t, int r, int b) {
         boolean result = super.setFrame(l, t, r, b);
 
-        if (popupMenu != null)
-            popupMenu.update();
+        if (spinnerMenu != null) {
+            carbon.widget.FrameLayout container = (FrameLayout) spinnerMenu.getContentView().findViewById(R.id.carbon_popupContainer);
+            if (container.getAnimator() == null)
+                spinnerMenu.update();
+        }
 
         return result;
     }
@@ -191,7 +199,7 @@ public class Spinner extends TextView implements TintedView {
         super.onAttachedToWindow();
 
         if (isShowingPopup)
-            popupMenu.showImmediate(Spinner.this);
+            spinnerMenu.showImmediate(Spinner.this);
     }
 
     @Override
@@ -199,7 +207,7 @@ public class Spinner extends TextView implements TintedView {
         super.onDetachedFromWindow();
 
         if (isShowingPopup)
-            popupMenu.dismissImmediate();
+            spinnerMenu.dismissImmediate();
     }
 
     @Override
@@ -210,7 +218,7 @@ public class Spinner extends TextView implements TintedView {
         SavedState ss = new SavedState(superState);
         //end
 
-        ss.stateToSave = this.isShowingPopup ? 1 : 0;
+        ss.isShowingPopup = this.isShowingPopup ? 1 : 0;
 
         return ss;
     }
@@ -227,14 +235,14 @@ public class Spinner extends TextView implements TintedView {
         super.onRestoreInstanceState(ss.getSuperState());
         //end
 
-        this.isShowingPopup = ss.stateToSave > 0;
+        this.isShowingPopup = ss.isShowingPopup > 0;
     }
 
     static class SavedState implements Parcelable {
         public static final SavedState EMPTY_STATE = new SavedState() {
         };
 
-        int stateToSave;
+        int isShowingPopup;
 
         Parcelable superState;
 
@@ -249,7 +257,7 @@ public class Spinner extends TextView implements TintedView {
         private SavedState(Parcel in) {
             Parcelable superState = in.readParcelable(EditText.class.getClassLoader());
             this.superState = superState != null ? superState : EMPTY_STATE;
-            this.stateToSave = in.readInt();
+            this.isShowingPopup = in.readInt();
         }
 
         @Override
@@ -261,7 +269,7 @@ public class Spinner extends TextView implements TintedView {
         @Override
         public void writeToParcel(@NonNull Parcel out, int flags) {
             out.writeParcelable(superState, flags);
-            out.writeInt(this.stateToSave);
+            out.writeInt(this.isShowingPopup);
         }
 
         public Parcelable getSuperState() {
@@ -279,33 +287,5 @@ public class Spinner extends TextView implements TintedView {
                         return new SavedState[size];
                     }
                 };
-    }
-
-
-    // -------------------------------
-    // tint
-    // -------------------------------
-
-    ColorStateList tint;
-
-    @Override
-    public void setTint(ColorStateList list) {
-        this.tint = list;
-        if (popupMenu != null)
-            popupMenu.setTint(list);
-    }
-
-    @Override
-    public void setTint(int color) {
-        if (color == 0) {
-            setTint(new ControlFocusedColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
-    }
-
-    @Override
-    public ColorStateList getTint() {
-        return tint;
     }
 }
