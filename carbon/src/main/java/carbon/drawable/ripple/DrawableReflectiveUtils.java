@@ -3,9 +3,10 @@ package carbon.drawable.ripple;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.os.Build;
-import android.support.v4.util.LruCache;
-import android.support.v4.util.SimpleArrayMap;
 import android.util.Log;
+
+import androidx.collection.LruCache;
+import androidx.collection.SimpleArrayMap;
 
 import java.lang.reflect.Method;
 
@@ -15,7 +16,7 @@ class DrawableReflectiveUtils {
     private static SimpleArrayMap<String, Method> sCachedMethods = new SimpleArrayMap<>();
     private static final ColorFilterLruCache COLOR_FILTER_CACHE = new ColorFilterLruCache(6);
 
-    final static Class[] INT_ARG = {int.class};
+    private final static Class[] INT_ARG = {int.class};
 
     @SuppressWarnings("unchecked")
     public static <T> T tryInvoke(Object target, String methodName, Class<?>[] argTypes, Object... args) {

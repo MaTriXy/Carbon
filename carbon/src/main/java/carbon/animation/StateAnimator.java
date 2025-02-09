@@ -1,17 +1,13 @@
 package carbon.animation;
 
+import android.animation.Animator;
 import android.util.StateSet;
 import android.view.View;
 import android.view.animation.Animation;
 
-import com.nineoldandroids.animation.Animator;
-
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 
-/**
- * Created by Marcin on 2015-02-20.
- */
 public class StateAnimator {
     private final ArrayList<Tuple> mTuples = new ArrayList<>();
 
@@ -63,8 +59,7 @@ public class StateAnimator {
     }
 
     /**
-     * Returns the current {@link Animation} which is started because of a state
-     * change.
+     * Returns the current {@link Animation} which is started because of a state change.
      *
      * @return The currently running Animation or null if no Animation is running
      */

@@ -1,52 +1,37 @@
 package tk.zielony.carbonsamples.animation;
 
-import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Button;
 
+import carbon.widget.Button;
+import carbon.widget.FloatingActionButton;
+import carbon.widget.FrameLayout;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.SampleAnnotation;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2014-12-15.
- */
-public class WidgetAnimationsActivity extends Activity {
-    int fabVisibility = View.VISIBLE;
-    int buttonVisibility = View.VISIBLE;
+@SampleAnnotation(layoutId = R.layout.activity_animations, titleId = R.string.widgetAnimationsActivity_title)
+public class WidgetAnimationsActivity extends ThemedActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_animations);
 
-        final View fab = findViewById(R.id.fab);
-        Button button = (Button) findViewById(R.id.button);
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (fabVisibility != View.VISIBLE) {
-                    fab.setVisibility(View.VISIBLE);
-                    fabVisibility = View.VISIBLE;
-                } else {
-                    fab.setVisibility(View.INVISIBLE);
-                    fabVisibility = View.INVISIBLE;
-                }
-            }
-        });
+        initToolbar();
 
-        final View button2 = findViewById(R.id.button2);
-        Button button3 = (Button) findViewById(R.id.button3);
-        button3.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (buttonVisibility != View.VISIBLE) {
-                    button2.setVisibility(View.VISIBLE);
-                    buttonVisibility = View.VISIBLE;
-                } else {
-                    button2.setVisibility(View.INVISIBLE);
-                    buttonVisibility = View.INVISIBLE;
-                }
-            }
+        final FloatingActionButton fab = findViewById(R.id.fab);
+        Button button = findViewById(R.id.button);
+        button.setOnClickListener(v -> fab.animateVisibility(fab.isVisible() ? View.INVISIBLE : View.VISIBLE));
+
+        final Button button2 = findViewById(R.id.button2);
+        Button button3 = findViewById(R.id.button3);
+        button3.setOnClickListener(v -> button2.animateVisibility(button2.isVisible() ? View.INVISIBLE : View.VISIBLE));
+
+        FrameLayout frame = findViewById(R.id.frame);
+        Button reveal = findViewById(R.id.reveal);
+        reveal.setOnClickListener(v -> {
+            float radius = (float) Math.sqrt((frame.getWidth() - 20) * (frame.getWidth() - 20) + (frame.getHeight() - 20) * (frame.getHeight() - 20));
+            frame.createCircularReveal(20, 20, 0, radius).start();
         });
     }
 }

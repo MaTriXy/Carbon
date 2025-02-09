@@ -1,55 +1,61 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
-import android.widget.ImageView;
 
-import com.squareup.picasso.Picasso;
+import com.annimon.stream.Stream;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Random;
 
-import carbon.animation.AnimUtils;
 import carbon.widget.Chip;
+import carbon.widget.EditText;
 import carbon.widget.FlowLayout;
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
+import tk.zielony.randomdata.DataContext;
+import tk.zielony.randomdata.person.DrawableAvatarGenerator;
+import tk.zielony.randomdata.person.Gender;
+import tk.zielony.randomdata.person.StringFirstNameGenerator;
 
-/**
- * Created by Marcin on 2015-12-19.
- */
-public class FlowLayoutActivity extends Activity {
-    private static List<String> fruits = new ArrayList<>(Arrays.asList("Strawberry", "Apple", "Orange", "Lemon", "Beer", "Lime", "Watermelon", "Blueberry", "Plum"));
+@SampleAnnotation(layoutId = R.layout.activity_flowlayout, titleId = R.string.flowLayoutActivity_title, iconId = R.drawable.ic_wrap_text_black_24dp)
+public class FlowLayoutActivity extends ThemedActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_flowlayout);
 
-        FlowLayout layout = (FlowLayout) findViewById(R.id.flowLayout);
-        for (int i = 0; i < layout.getChildCount() - 1; i++) {
-            final Chip chip = (Chip) layout.getChildAt(i);
-            chip.setText(fruits.get(i % fruits.size()));
-            if (i % 3 != 1) {
-                chip.setIconVisible(true);
-                String image = "http://lorempixel.com/100/100/people/#" + System.currentTimeMillis();
-                Picasso.with(this).load(image).into((ImageView) chip.getIconView());
-            } else {
-                chip.setIconVisible(false);
+        initToolbar();
+
+        DrawableAvatarGenerator avatarGenerator = new DrawableAvatarGenerator(this);
+        StringFirstNameGenerator nameGenerator = new StringFirstNameGenerator(Gender.Both, false, false);
+
+        Random random = new Random();
+        FlowLayout layout = findViewById(R.id.flowLayout);
+        Stream.of(layout.getViews()).filter(v -> v instanceof Chip).forEach(v -> {
+            final Chip chip = (Chip) v;
+            DataContext dataContext = new DataContext();
+            chip.setText(nameGenerator.next(dataContext));
+            if (random.nextBoolean())
+                chip.setIcon(avatarGenerator.next(dataContext));
+            chip.setRemovable(random.nextBoolean());
+            chip.setOnRemoveListener(() -> {
+                chip.setVisibility(View.GONE);
+            });
+        });
+
+        EditText addChip = findViewById(R.id.addChip);
+        addChip.setOnEditorActionListener((textView, i, keyEvent) -> {
+            if(keyEvent.getAction()== KeyEvent.ACTION_DOWN) {
+                Chip chip = new Chip(FlowLayoutActivity.this);
+                chip.setText(addChip.getText());
+                chip.setRemovable(random.nextBoolean());
+                chip.setSelected(random.nextBoolean());
+                layout.addView(chip);
+                addChip.setText("");
             }
-            if (i % 3 != 2) {
-                chip.setRemovable(true);
-                chip.setOnRemoveListener(new Chip.OnRemoveListener() {
-                    @Override
-                    public void onDismiss() {
-                        chip.setOutAnimation(AnimUtils.Style.Fade);
-                        chip.setVisibility(View.GONE);
-                    }
-                });
-            } else {
-                chip.setRemovable(false);
-            }
-        }
+            return true;
+        });
     }
 }

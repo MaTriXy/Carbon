@@ -1,30 +1,36 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
-import android.support.v7.widget.LinearLayoutManager;
+
+import androidx.recyclerview.widget.LinearLayoutManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import carbon.recycler.DividerItemDecoration;
 import carbon.widget.ExpandableRecyclerView;
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2015-05-16.
- */
-public class ExpandableRecyclerActivity extends Activity {
+@SampleAnnotation(layoutId = R.layout.activity_expandablerecycler, titleId = R.string.expandableRecyclerActivity_title)
+public class ExpandableRecyclerActivity extends ThemedActivity {
     private static List<String> fruits = new ArrayList<>(Arrays.asList("Strawberry", "Apple", "Orange", "Lemon", "Beer", "Lime", "Watermelon", "Blueberry", "Plum"));
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_expandablerecycler);
 
-        final ExpandableRecyclerView recyclerView = (ExpandableRecyclerView) findViewById(R.id.recyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+        initToolbar();
+
+        final ExpandableRecyclerView recyclerView = findViewById(R.id.recyclerView);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
         final ExpandableFruitAdapter fruitAdapter = new ExpandableFruitAdapter(fruits);
         recyclerView.setAdapter(fruitAdapter);
+
+        DividerItemDecoration decoration = new DividerItemDecoration(this);
+        decoration.setDrawBefore(position -> position > 0 && fruits.contains(fruitAdapter.getItem(position)));
+        recyclerView.addItemDecoration(decoration);
     }
 }

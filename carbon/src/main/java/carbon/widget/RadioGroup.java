@@ -23,40 +23,39 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.widget.CompoundButton;
+import android.widget.Checkable;
 
 import carbon.R;
 
 
 /**
  * <p>This class is used to create a multiple-exclusion scope for a set of radio
- * buttons. Checking one radio button that belongs to a radio group unchecks
- * any previously checked radio button within the same group.</p>
- *
+ * buttons. Checking one radio button that belongs to a radio group unchecks any previously checked
+ * radio button within the same group.</p>
+ * <p>
  * <p>Intially, all of the radio buttons are unchecked. While it is not possible
- * to uncheck a particular radio button, the radio group can be cleared to
- * remove the checked state.</p>
- *
+ * to uncheck a particular radio button, the radio group can be cleared to remove the checked
+ * state.</p>
+ * <p>
  * <p>The selection is identified by the unique id of the radio button as defined
  * in the XML layout file.</p>
- *
+ * <p>
  * <p><strong>XML Attributes</strong></p>
- * <p>See {@link android.R.styleable#RadioGroup RadioGroup Attributes}, 
- * {@link android.R.styleable#LinearLayout LinearLayout Attributes},
- * {@link android.R.styleable#ViewGroup ViewGroup Attributes},
- * {@link android.R.styleable#View View Attributes}</p>
+ * <p>See {@link android.R.styleable#RadioGroup RadioGroup Attributes},
+ * {@link android.R.styleable#LinearLayout LinearLayout Attributes}, {@link
+ * android.R.styleable#ViewGroup ViewGroup Attributes}, {@link android.R.styleable#View View
+ * Attributes}</p>
  * <p>Also see
- * {@link android.widget.LinearLayout.LayoutParams LinearLayout.LayoutParams}
- * for layout attributes.</p>
- * 
- * @see RadioButton
+ * {@link android.widget.LinearLayout.LayoutParams LinearLayout.LayoutParams} for layout
+ * attributes.</p>
  *
+ * @see RadioButton
  */
 public class RadioGroup extends LinearLayout {
     // holds the checked id; the selection is empty by default
     private int mCheckedId = -1;
     // tracks children radio buttons checked state
-    private RadioButton.OnCheckedChangeListener mChildOnCheckedChangeListener;
+    private carbon.widget.OnCheckedChangeListener mChildOnCheckedChangeListener;
     // when true, mOnCheckedChangeListener discards events
     private boolean mProtectFromCheckedChange = false;
     private OnCheckedChangeListener mOnCheckedChangeListener;
@@ -123,15 +122,15 @@ public class RadioGroup extends LinearLayout {
 
     @Override
     public void addView(View child, int index, ViewGroup.LayoutParams params) {
-        if (child instanceof RadioButton) {
-            final RadioButton button = (RadioButton) child;
+        if (child instanceof Checkable) {
+            final Checkable button = (Checkable) child;
             if (button.isChecked()) {
                 mProtectFromCheckedChange = true;
                 if (mCheckedId != -1) {
                     setCheckedStateForView(mCheckedId, false);
                 }
                 mProtectFromCheckedChange = false;
-                setCheckedId(button.getId());
+                setCheckedId(child.getId());
             }
         }
 
@@ -140,12 +139,11 @@ public class RadioGroup extends LinearLayout {
 
     /**
      * <p>Sets the selection to the radio button whose identifier is passed in
-     * parameter. Using -1 as the selection identifier clears the selection;
-     * such an operation is equivalent to invoking {@link #clearCheck()}.</p>
+     * parameter. Using -1 as the selection identifier clears the selection; such an operation is
+     * equivalent to invoking {@link #clearCheck()}.</p>
      *
      * @param id the unique id of the radio button to select in this group
-     *
-     * @see #getCheckedRadioButtonId()
+     * @see #getCheckedButtonId()
      * @see #clearCheck()
      */
     public void check(int id) {
@@ -174,8 +172,8 @@ public class RadioGroup extends LinearLayout {
 
     private void setCheckedStateForView(int viewId, boolean checked) {
         View checkedView = findViewById(viewId);
-        if (checkedView != null && checkedView instanceof RadioButton) {
-            ((RadioButton) checkedView).setChecked(checked);
+        if (checkedView != null && checkedView instanceof Checkable) {
+            ((Checkable) checkedView).setChecked(checked);
         }
     }
 
@@ -184,23 +182,20 @@ public class RadioGroup extends LinearLayout {
      * Upon empty selection, the returned value is -1.</p>
      *
      * @return the unique id of the selected radio button in this group
-     *
+     * @attr ref android.R.styleable#RadioGroup_checkedButton
      * @see #check(int)
      * @see #clearCheck()
-     *
-     * @attr ref android.R.styleable#RadioGroup_checkedButton
      */
-    public int getCheckedRadioButtonId() {
+    public int getCheckedButtonId() {
         return mCheckedId;
     }
 
     /**
      * <p>Clears the selection. When the selection is cleared, no radio button
-     * in this group is selected and {@link #getCheckedRadioButtonId()} returns
-     * null.</p>
+     * in this group is selected and {@link #getCheckedButtonId()} returns null.</p>
      *
      * @see #check(int)
-     * @see #getCheckedRadioButtonId()
+     * @see #getCheckedButtonId()
      */
     public void clearCheck() {
         check(-1);
@@ -216,27 +211,6 @@ public class RadioGroup extends LinearLayout {
         mOnCheckedChangeListener = listener;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public LayoutParams generateLayoutParams(AttributeSet attrs) {
-        return new RadioGroup.LayoutParams(getContext(), attrs);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected boolean checkLayoutParams(ViewGroup.LayoutParams p) {
-        return p instanceof RadioGroup.LayoutParams;
-    }
-
-    @Override
-    protected LinearLayout.LayoutParams generateDefaultLayoutParams() {
-        return new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-    }
-
     @Override
     public void onInitializeAccessibilityEvent(AccessibilityEvent event) {
         super.onInitializeAccessibilityEvent(event);
@@ -246,81 +220,7 @@ public class RadioGroup extends LinearLayout {
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-       // info.setClassName(RadioGroup.class.getName());
-    }
-
-    /**
-     * <p>This set of layout parameters defaults the width and the height of
-     * the children to {@link #WRAP_CONTENT} when they are not specified in the
-     * XML file. Otherwise, this class ussed the value read from the XML file.</p>
-     *
-     * <p>See
-     * {@link android.R.styleable#LinearLayout_Layout LinearLayout Attributes}
-     * for a list of all child view attributes that this class supports.</p>
-     *
-     */
-    public static class LayoutParams extends LinearLayout.LayoutParams {
-        /**
-         * {@inheritDoc}
-         */
-        public LayoutParams(Context c, AttributeSet attrs) {
-            super(c, attrs);
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        public LayoutParams(int w, int h) {
-            super(w, h);
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        public LayoutParams(int w, int h, float initWeight) {
-            super(w, h, initWeight);
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        public LayoutParams(ViewGroup.LayoutParams p) {
-            super(p);
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        public LayoutParams(MarginLayoutParams source) {
-            super(source);
-        }
-
-        /**
-         * <p>Fixes the child's width to
-         * {@link android.view.ViewGroup.LayoutParams#WRAP_CONTENT} and the child's
-         * height to  {@link android.view.ViewGroup.LayoutParams#WRAP_CONTENT}
-         * when not specified in the XML file.</p>
-         *
-         * @param a the styled attributes set
-         * @param widthAttr the width attribute to fetch
-         * @param heightAttr the height attribute to fetch
-         */
-        @Override
-        protected void setBaseAttributes(TypedArray a,
-                int widthAttr, int heightAttr) {
-
-            if (a.hasValue(widthAttr)) {
-                width = a.getLayoutDimension(widthAttr, "layout_width");
-            } else {
-                width = WRAP_CONTENT;
-            }
-            
-            if (a.hasValue(heightAttr)) {
-                height = a.getLayoutDimension(heightAttr, "layout_height");
-            } else {
-                height = WRAP_CONTENT;
-            }
-        }
+        // info.setClassName(RadioGroup.class.getName());
     }
 
     /**
@@ -332,14 +232,14 @@ public class RadioGroup extends LinearLayout {
          * <p>Called when the checked radio button has changed. When the
          * selection is cleared, checkedId is -1.</p>
          *
-         * @param group the group in which the checked radio button has changed
+         * @param group     the group in which the checked radio button has changed
          * @param checkedId the unique identifier of the newly checked radio button
          */
-        public void onCheckedChanged(RadioGroup group, int checkedId);
+        void onCheckedChanged(RadioGroup group, int checkedId);
     }
 
-    private class CheckedStateTracker implements RadioButton.OnCheckedChangeListener {
-        public void onCheckedChanged(RadioButton buttonView, boolean isChecked) {
+    private class CheckedStateTracker implements carbon.widget.OnCheckedChangeListener {
+        public void onCheckedChanged(Checkable view, boolean isChecked) {
             // prevents from infinite recursion
             if (mProtectFromCheckedChange) {
                 return;
@@ -351,15 +251,15 @@ public class RadioGroup extends LinearLayout {
             }
             mProtectFromCheckedChange = false;
 
-            int id = buttonView.getId();
+            int id = ((View) view).getId();
             setCheckedId(id);
         }
     }
 
     /**
      * <p>A pass-through listener acts upon the events and dispatches them
-     * to another listener. This allows the table layout to set its own internal
-     * hierarchy change listener without preventing the user to setup his.</p>
+     * to another listener. This allows the table layout to set its own internal hierarchy change
+     * listener without preventing the user to setup his.</p>
      */
     private class PassThroughHierarchyChangeListener implements
             ViewGroup.OnHierarchyChangeListener {

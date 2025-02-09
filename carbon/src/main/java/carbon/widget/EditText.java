@@ -1,48 +1,61 @@
 package carbon.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Point;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
-import android.graphics.Shader;
-import android.graphics.Typeface;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.os.Parcel;
-import android.os.Parcelable;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
+import android.text.Layout;
+import android.text.StaticLayout;
 import android.text.TextPaint;
-import android.text.TextWatcher;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.TypedValue;
-import android.view.ActionMode;
-import android.view.ContextMenu;
-import android.view.ContextThemeWrapper;
-import android.view.Display;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewAnimationUtils;
 import android.view.ViewGroup;
-import android.view.WindowManager;
-import android.view.animation.DecelerateInterpolator;
-import android.widget.PopupWindow;
+import android.view.ViewOutlineProvider;
 import android.widget.TextView;
 
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.AnimatorListenerAdapter;
-import com.nineoldandroids.animation.ValueAnimator;
+import androidx.annotation.AttrRes;
+import androidx.annotation.FloatRange;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StyleRes;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
 
-import java.lang.reflect.Field;
+import com.google.android.material.shape.CutCornerTreatment;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.RoundedCornerTreatment;
+import com.google.android.material.shape.ShapeAppearanceModel;
+
+import org.jetbrains.annotations.NotNull;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import carbon.Carbon;
@@ -51,565 +64,262 @@ import carbon.animation.AnimUtils;
 import carbon.animation.AnimatedColorStateList;
 import carbon.animation.AnimatedView;
 import carbon.animation.StateAnimator;
-import carbon.drawable.DefaultColorStateList;
-import carbon.drawable.EmptyDrawable;
-import carbon.drawable.VectorDrawable;
+import carbon.drawable.UnderlineDrawable;
 import carbon.drawable.ripple.RippleDrawable;
 import carbon.drawable.ripple.RippleView;
-import carbon.internal.EditTextMenu;
-import carbon.internal.Roboto;
-import carbon.internal.TypefaceUtils;
+import carbon.internal.RevealAnimator;
+import carbon.view.AllCapsTransformationMethod;
+import carbon.view.AutoSizeTextView;
+import carbon.view.InputView;
+import carbon.view.MarginView;
+import carbon.view.MaxSizeView;
+import carbon.view.RevealView;
+import carbon.view.ShadowView;
+import carbon.view.ShapeModelView;
+import carbon.view.SimpleTextWatcher;
+import carbon.view.StateAnimatorView;
+import carbon.view.StrokeView;
+import carbon.view.TextAppearanceView;
+import carbon.view.TintedView;
+import carbon.view.TouchMarginView;
+import carbon.view.ValidStateView;
+import carbon.view.VisibleView;
 
-import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
-import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
+@SuppressLint("AppCompatCustomView")
+public class EditText extends android.widget.EditText
+        implements
+        ShadowView,
+        RippleView,
+        TouchMarginView,
+        StateAnimatorView,
+        AnimatedView,
+        ShapeModelView,
+        TintedView,
+        InputView,
+        StrokeView,
+        MaxSizeView,
+        ValidStateView,
+        AutoSizeTextView,
+        RevealView,
+        VisibleView,
+        MarginView,
+        TextAppearanceView {
 
-/**
- * Created by Marcin on 2015-02-14.
- */
-public class EditText extends android.widget.EditText implements RippleView, TouchMarginView, StateAnimatorView, AnimatedView, TintedView {
-    String[] suggestions = new String[]{"test", "suggestion"};
+    boolean required = false;
+    private int minCharacters;
+    private int maxCharacters = Integer.MAX_VALUE;
 
-    private Field mIgnoreActionUpEventField;
-    private Object editor;
-
-    public enum LabelStyle {
-        Floating, Persistent, Hint
-    }
-
-    Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-
-    int DIVIDER_PADDING;
-    int cursorColor;
+    TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     private Pattern pattern;
-    private String errorMessage;
-    TextPaint errorPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    boolean afterFirstInteraction = false;
-    String label;
-
     private int matchingView;
-    int minCharacters;
-    int maxCharacters = Integer.MAX_VALUE;
-    TextPaint counterPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
 
-    TextPaint labelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    LabelStyle labelStyle;
-
-    int internalPaddingTop = 0, internalPaddingBottom = 0;
-
-    private BitmapShader dashPathShader;
-    private float labelFrac = 0;
-    private boolean underline = true;
     private boolean valid = true;
-    boolean required = false, showPasswordButtonEnabled, clearButtonEnabled;
+    private boolean skipValidate = false;
+    private List<OnValidChangedListener> validChangedListeners = new ArrayList<>();
 
-    Drawable clearButton, showPasswordButton;
+    private CharSequence prefix, suffix;
+    private StaticLayout prefixLayout, suffixLayout;
+    private int prefixPadding, prefixTextPadding, suffixPadding, suffixTextPadding;
 
-    float PADDING_ERROR, PADDING_LABEL;
-
-    OnValidateListener validateListener;
-
-    TextWatcher textWatcher = new TextWatcher() {
-        @Override
-        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
-        }
-
-        @Override
-        public void onTextChanged(CharSequence s, int start, int before, int count) {
-
-        }
-
-        @Override
-        public void afterTextChanged(Editable s) {
-            afterFirstInteraction = true;
-            validateInternalEvent();
-            try {
-                int start = getSelectionStart() - 1;
-                char c;
-                StringBuilder builder = new StringBuilder();
-                while (start >= 0 && Character.isLetterOrDigit(c = s.charAt(start--))) {
-                    builder.insert(0, c);
-                }
-            } catch (Exception e) {
-            }
-        }
-    };
+    private List<OnValidateListener> validateListeners = new ArrayList<>();
 
     public EditText(Context context) {
         super(context);
-        initEditText(null, android.R.attr.editTextStyle);
+        initEditText(null, android.R.attr.editTextStyle, R.style.carbon_EditText);
     }
 
     public EditText(Context context, AttributeSet attrs) {
         super(context, attrs);
-        initEditText(attrs, android.R.attr.editTextStyle);
+        initEditText(attrs, android.R.attr.editTextStyle, R.style.carbon_EditText);
     }
 
-    public EditText(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-        initEditText(attrs, defStyle);
+    public EditText(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initEditText(attrs, defStyleAttr, R.style.carbon_EditText);
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public EditText(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public EditText(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        initEditText(attrs, defStyleAttr);
+        initEditText(attrs, defStyleAttr, defStyleRes);
     }
 
-    public void initEditText(AttributeSet attrs, int defStyleAttr) {
-        if (attrs != null) {
-            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.EditText, defStyleAttr, 0);
+    private static int[] rippleIds = new int[]{
+            R.styleable.EditText_carbon_rippleColor,
+            R.styleable.EditText_carbon_rippleStyle,
+            R.styleable.EditText_carbon_rippleHotspot,
+            R.styleable.EditText_carbon_rippleRadius
+    };
+    private static int[] animationIds = new int[]{
+            R.styleable.EditText_carbon_inAnimation,
+            R.styleable.EditText_carbon_outAnimation
+    };
+    private static int[] touchMarginIds = new int[]{
+            R.styleable.EditText_carbon_touchMargin,
+            R.styleable.EditText_carbon_touchMarginLeft,
+            R.styleable.EditText_carbon_touchMarginTop,
+            R.styleable.EditText_carbon_touchMarginRight,
+            R.styleable.EditText_carbon_touchMarginBottom
+    };
+    private static int[] tintIds = new int[]{
+            R.styleable.EditText_carbon_tint,
+            R.styleable.EditText_carbon_tintMode,
+            R.styleable.EditText_carbon_backgroundTint,
+            R.styleable.EditText_carbon_backgroundTintMode,
+            R.styleable.EditText_carbon_animateColorChanges
+    };
+    private static int[] strokeIds = new int[]{
+            R.styleable.EditText_carbon_stroke,
+            R.styleable.EditText_carbon_strokeWidth
+    };
+    private static int[] cornerCutRadiusIds = new int[]{
+            R.styleable.EditText_carbon_cornerRadiusTopStart,
+            R.styleable.EditText_carbon_cornerRadiusTopEnd,
+            R.styleable.EditText_carbon_cornerRadiusBottomStart,
+            R.styleable.EditText_carbon_cornerRadiusBottomEnd,
+            R.styleable.EditText_carbon_cornerRadius,
+            R.styleable.EditText_carbon_cornerCutTopStart,
+            R.styleable.EditText_carbon_cornerCutTopEnd,
+            R.styleable.EditText_carbon_cornerCutBottomStart,
+            R.styleable.EditText_carbon_cornerCutBottomEnd,
+            R.styleable.EditText_carbon_cornerCut
+    };
+    private static int[] maxSizeIds = new int[]{
+            R.styleable.EditText_carbon_maxWidth,
+            R.styleable.EditText_carbon_maxHeight,
+    };
+    private static int[] elevationIds = new int[]{
+            R.styleable.EditText_carbon_elevation,
+            R.styleable.EditText_carbon_elevationShadowColor,
+            R.styleable.EditText_carbon_elevationAmbientShadowColor,
+            R.styleable.EditText_carbon_elevationSpotShadowColor
+    };
+    private static int[] autoSizeTextIds = new int[]{
+            R.styleable.EditText_carbon_autoSizeText,
+            R.styleable.EditText_carbon_autoSizeMinTextSize,
+            R.styleable.EditText_carbon_autoSizeMaxTextSize,
+            R.styleable.EditText_carbon_autoSizeStepGranularity
+    };
 
-            int ap = a.getResourceId(R.styleable.EditText_android_textAppearance, -1);
-            if (ap != -1)
-                setTextAppearanceInternal(ap);
+    private void initEditText(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.EditText, defStyleAttr, defStyleRes);
 
-            for (int i = 0; i < a.getIndexCount(); i++) {
-                int attr = a.getIndex(i);
-                if (attr == R.styleable.EditText_carbon_textAllCaps) {
-                    setAllCaps(a.getBoolean(attr, false));
-                } else if (!isInEditMode() && attr == R.styleable.EditText_carbon_fontPath) {
-                    String path = a.getString(attr);
-                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), path);
-                    setTypeface(typeface);
-                } else if (attr == R.styleable.EditText_carbon_fontFamily) {
-                    int textStyle = a.getInt(R.styleable.EditText_android_textStyle, 0);
-                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), a.getString(attr), textStyle);
-                    setTypeface(typeface);
-                }
+        int ap = a.getResourceId(R.styleable.EditText_android_textAppearance, -1);
+        if (ap != -1)
+            Carbon.setTextAppearance(this, ap, a.hasValue(R.styleable.EditText_android_textColor), false);
+
+        int textStyle = a.getInt(R.styleable.EditText_android_textStyle, 0);
+        int fontWeight = a.getInt(R.styleable.EditText_carbon_fontWeight, 400);
+
+        for (int i = 0; i < a.getIndexCount(); i++) {
+            int attr = a.getIndex(i);
+            if (attr == R.styleable.EditText_carbon_font) {
+                Carbon.handleFontAttribute(this, a, textStyle, fontWeight, attr);
+            } else if (attr == R.styleable.EditText_android_textAllCaps) {
+                setAllCaps(a.getBoolean(attr, true));
+            } else if (attr == R.styleable.EditText_android_singleLine) {
+                setSingleLine(a.getBoolean(attr, false));
+            } else if (attr == R.styleable.EditText_android_maxLines) {
+                setMaxLines(a.getInt(attr, Integer.MAX_VALUE));
             }
-
-            setCursorColor(a.getColor(R.styleable.EditText_carbon_cursorColor, 0));
-
-            setPattern(a.getString(R.styleable.EditText_carbon_pattern));
-            DIVIDER_PADDING = (int) getResources().getDimension(R.dimen.carbon_paddingHalf);
-
-            if (!isInEditMode())
-                setError(a.getString(R.styleable.EditText_carbon_errorMessage));
-            setMatchingView(a.getResourceId(R.styleable.EditText_carbon_matchingView, 0));
-            setMinCharacters(a.getInt(R.styleable.EditText_carbon_minCharacters, 0));
-            setMaxCharacters(a.getInt(R.styleable.EditText_carbon_maxCharacters, Integer.MAX_VALUE));
-            setLabelStyle(LabelStyle.values()[a.getInt(R.styleable.EditText_carbon_labelStyle, a.getBoolean(R.styleable.EditText_carbon_floatingLabel, false) ? 0 : 2)]);
-            setLabel(a.getString(R.styleable.EditText_carbon_label));
-            if (labelStyle == LabelStyle.Floating && label == null)
-                label = getHint().toString();
-            setUnderline(a.getBoolean(R.styleable.EditText_carbon_underline, true));
-            setRequired(a.getBoolean(R.styleable.EditText_carbon_required, false));
-            setShowPasswordButtonEnabled(a.getBoolean(R.styleable.EditText_carbon_showPasswordButton, false));
-            setClearButtonEnabled(a.getBoolean(R.styleable.EditText_carbon_clearButton, false));
-
-            a.recycle();
-
-            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
-            Carbon.initAnimations(this, attrs, defStyleAttr);
-            Carbon.initTouchMargin(this, attrs, defStyleAttr);
-            Carbon.initTint(this, attrs, defStyleAttr);
-        } else {
-            setTint(0);
         }
 
-        if (!isInEditMode()) {
-            errorPaint.setTypeface(TypefaceUtils.getTypeface(getContext(), Roboto.Regular));
-            errorPaint.setTextSize(getResources().getDimension(R.dimen.carbon_errorTextSize));
-            errorPaint.setColor(tint.getColorForState(new int[]{R.attr.carbon_state_invalid}, tint.getDefaultColor()));
+        setPattern(a.getString(R.styleable.EditText_carbon_pattern));
+        setMinCharacters(a.getInt(R.styleable.EditText_carbon_minCharacters, 0));
+        setMaxCharacters(a.getInt(R.styleable.EditText_carbon_maxCharacters, Integer.MAX_VALUE));
+        setRequired(a.getBoolean(R.styleable.EditText_carbon_required, false));
 
-            labelPaint.setTypeface(TypefaceUtils.getTypeface(getContext(), Roboto.Regular));
-            labelPaint.setTextSize(getResources().getDimension(R.dimen.carbon_labelTextSize));
+        setPrefix(a.getString(R.styleable.EditText_carbon_prefix));
+        setSuffix(a.getString(R.styleable.EditText_carbon_suffix));
 
-            counterPaint.setTypeface(TypefaceUtils.getTypeface(getContext(), Roboto.Regular));
-            counterPaint.setTextSize(getResources().getDimension(R.dimen.carbon_charCounterTextSize));
+        setMatchingView(a.getResourceId(R.styleable.EditText_carbon_matchingView, 0));
+
+        Carbon.initDefaultTextColor(this, a, R.styleable.EditText_android_textColor);
+
+        Carbon.initRippleDrawable(this, a, rippleIds);
+        Carbon.initElevation(this, a, elevationIds);
+        Carbon.initTint(this, a, tintIds);
+        Carbon.initAnimations(this, a, animationIds);
+        Carbon.initTouchMargin(this, a, touchMarginIds);
+        Carbon.initMaxSize(this, a, maxSizeIds);
+        Carbon.initHtmlText(this, a, R.styleable.EditText_carbon_htmlText);
+        Carbon.initStroke(this, a, strokeIds);
+        Carbon.initCornerCutRadius(this, a, cornerCutRadiusIds);
+        Carbon.initAutoSizeText(this, a, autoSizeTextIds);
+        setTooltipText(a.getText(R.styleable.EditText_carbon_tooltipText));
+
+        if (a.getResourceId(R.styleable.EditText_android_background, 0) == R.color.carbon_colorUnderline) {
+            float underlineWidth = getResources().getDimensionPixelSize(R.dimen.carbon_1dip);
+            UnderlineDrawable underlineDrawable = new UnderlineDrawable();
+            underlineDrawable.setThickness(underlineWidth);
+            underlineDrawable.setPaddingBottom(getPaddingBottom() - getResources().getDimensionPixelSize(R.dimen.carbon_paddingHalf) + underlineWidth / 2);
+            setBackgroundDrawable(underlineDrawable);
         }
 
-        try {
-            Field mHighlightPaintField = android.widget.TextView.class.getDeclaredField("mHighlightPaint");
-            mHighlightPaintField.setAccessible(true);
-            mHighlightPaintField.set(this, new Paint() {
-                @Override
-                public void setColor(int color) {
-                    if (getSelectionStart() == getSelectionEnd()) {
-                        super.setColor(cursorColor);
-                    } else {
-                        super.setColor(color);
-                    }
-                }
-            });
-        } catch (Exception e) {
+        a.recycle();
 
-        }
+        addTextChangedListener(new SimpleTextWatcher() {
+            @Override
+            public void afterTextChanged(@NotNull Editable editable) {
+                if (!skipValidate)
+                    validate();
+            }
+        });
 
-        addTextChangedListener(textWatcher);
-
-        int underlineWidth = getResources().getDimensionPixelSize(R.dimen.carbon_1dip);
-        Bitmap dashPathBitmap = Bitmap.createBitmap(underlineWidth * 4, underlineWidth, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(dashPathBitmap);
-        paint.setColor(0xffffffff);
-        paint.setAlpha(255);
-        c.drawCircle(dashPathBitmap.getHeight() / 2.0f, dashPathBitmap.getHeight() / 2.0f, dashPathBitmap.getHeight() / 2.0f, paint);
-        dashPathShader = new BitmapShader(dashPathBitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
-        PADDING_ERROR = getResources().getDimension(R.dimen.carbon_paddingHalf);
-        PADDING_LABEL = getResources().getDimension(R.dimen.carbon_paddingHalf);
-
-        if (isFocused() && getText().length() > 0)
-            labelFrac = 1;
-
-        initSelectionHandle();
-
-        validateInternalEvent();
+        setSelection(length());
     }
 
-    private void initSelectionHandle() {
-        if (android.os.Build.VERSION.SDK_INT >= 11) {
-            try {
-                final Field fEditor = android.widget.TextView.class.getDeclaredField("mEditor");
-                fEditor.setAccessible(true);
-                editor = fEditor.get(this);
-
-                mIgnoreActionUpEventField = editor.getClass().getDeclaredField("mIgnoreActionUpEvent");
-                mIgnoreActionUpEventField.setAccessible(true);
-
-                final Field fSelectHandleLeft = editor.getClass().getDeclaredField("mSelectHandleLeft");
-                final Field fSelectHandleRight = editor.getClass().getDeclaredField("mSelectHandleRight");
-                final Field fSelectHandleCenter = editor.getClass().getDeclaredField("mSelectHandleCenter");
-
-                fSelectHandleLeft.setAccessible(true);
-                fSelectHandleRight.setAccessible(true);
-                fSelectHandleCenter.setAccessible(true);
-
-                VectorDrawable leftHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_left);
-                leftHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleLeft.set(editor, leftHandle);
-
-                VectorDrawable rightHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_right);
-                rightHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleRight.set(editor, rightHandle);
-
-                VectorDrawable middleHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_middle);
-                middleHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleCenter.set(editor, middleHandle);
-            } catch (final Exception ignored) {
-            }
-        } else {
-            try {
-                final Field fSelectHandleLeft = android.widget.TextView.class.getDeclaredField("mSelectHandleLeft");
-                final Field fSelectHandleRight = android.widget.TextView.class.getDeclaredField("mSelectHandleRight");
-                final Field fSelectHandleCenter = android.widget.TextView.class.getDeclaredField("mSelectHandleCenter");
-
-                fSelectHandleLeft.setAccessible(true);
-                fSelectHandleRight.setAccessible(true);
-                fSelectHandleCenter.setAccessible(true);
-
-                VectorDrawable leftHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_left);
-                leftHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleLeft.set(this, leftHandle);
-
-                VectorDrawable rightHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_right);
-                rightHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleRight.set(this, rightHandle);
-
-                VectorDrawable middleHandle = new VectorDrawable(getResources(), R.raw.carbon_selecthandle_middle);
-                middleHandle.setTint(Carbon.getThemeColor(getContext(), R.attr.colorAccent));
-                fSelectHandleCenter.set(this, middleHandle);
-            } catch (final Exception ignored) {
-            }
-
-        }
-    }
-
+    @Deprecated
     public void setCursorColor(int cursorColor) {
-        this.cursorColor = cursorColor;
     }
 
+    @Deprecated
     public int getCursorColor() {
-        return cursorColor;
+        return 0;
     }
 
-    public boolean hasUnderline() {
-        return underline;
+    public CharSequence getPrefix() {
+        return prefix;
     }
 
-    public void setUnderline(boolean drawUnderline) {
-        this.underline = drawUnderline;
-    }
-
-    public boolean isRequired() {
-        return required;
-    }
-
-    public void setRequired(boolean required) {
-        this.required = required;
-    }
-
-    public boolean isShowPasswordButtonEnabled() {
-        return showPasswordButtonEnabled;
-    }
-
-    public void setShowPasswordButtonEnabled(boolean b) {
-        this.showPasswordButtonEnabled = b;
-        if (b) {
-            setClearButtonEnabled(false);
-            VectorDrawable vectorDrawable = new VectorDrawable(getResources(), R.raw.carbon_clear);
-            this.showPasswordButton = (Drawable) Carbon.createRippleDrawable(ColorStateList.valueOf(Carbon.getThemeColor(getContext(), R.attr.carbon_rippleColor)), RippleDrawable.Style.Borderless, this, vectorDrawable, false, 0);
-            setCompoundDrawablesWithIntrinsicBounds(null, null, showPasswordButton, null);
-        } else {
-            this.showPasswordButton = null;
-            setCompoundDrawables(null, null, null, null);
-        }
-    }
-
-    public boolean isClearButtonEnabled() {
-        return clearButtonEnabled;
-    }
-
-    public void setClearButtonEnabled(boolean b) {
-        this.clearButtonEnabled = b;
-        if (b) {
-            setShowPasswordButtonEnabled(false);
-            VectorDrawable vectorDrawable = new VectorDrawable(getResources(), R.raw.carbon_visibility_off);
-            clearButton = (Drawable) Carbon.createRippleDrawable(ColorStateList.valueOf(Carbon.getThemeColor(getContext(), R.attr.carbon_rippleColor)), RippleDrawable.Style.Borderless, this, vectorDrawable, false, 0);
-            setCompoundDrawablesWithIntrinsicBounds(null, null, clearButton, null);
-        } else {
-            clearButton = null;
-            setCompoundDrawables(null, null, null, null);
-        }
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public void setLabel(String label) {
-        this.label = label;
-    }
-
-    public void validate() {
-        afterFirstInteraction = true;
-        validateInternal();
-        postInvalidate();
-    }
-
-    private void validateInternal() {
-        String s = getText().toString();
-        // dictionary suggestions vs s.length()>0
-        /*try {
-            Field mTextField = getText().getClass().getDeclaredField("mText");
-            mTextField.setAccessible(true);
-            s = new String((char[])mTextField.get(getText()));
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        }*/
-        boolean drawPatternError = false, drawMatchingViewError = false;
-        if (pattern != null)
-            drawPatternError = afterFirstInteraction && !pattern.matcher(s).matches();
-        if (matchingView != 0) {
-            View view = getRootView().findViewById(matchingView);
-            if (view instanceof TextView) {
-                TextView matchingTextView = (TextView) view;
-                if (afterFirstInteraction && !matchingTextView.getText().toString().equals(getText().toString()))
-                    drawMatchingViewError = true;
-            }
-        }
-
-        boolean counterError = afterFirstInteraction && (minCharacters > 0 && s.length() < minCharacters || maxCharacters < Integer.MAX_VALUE && s.length() > maxCharacters);
-
-        boolean requiredError = required && s.length() == 0;
-
-        valid = !counterError && !drawMatchingViewError && !drawPatternError && !requiredError;
-
-        refreshDrawableState();
-
-        if (labelStyle == LabelStyle.Floating)
-            animateFloatingLabel(isFocused() && s.length() > 0);
-    }
-
-    private void validateInternalEvent() {
-        validateInternal();
-        fireOnValidateEvent();
-        postInvalidate();
-    }
-
-    public void setOnValidateListener(OnValidateListener listener) {
-        this.validateListener = listener;
-    }
-
-    private void fireOnValidateEvent() {
-        if (validateListener != null)
-            validateListener.onValidate(canShowError());
-    }
-
-    public LabelStyle getLabelStyle() {
-        return labelStyle;
-    }
-
-    public void setLabelStyle(LabelStyle labelStyle) {
-        this.labelStyle = labelStyle;
-    }
-
-    public void setAllCaps(boolean allCaps) {
-        if (allCaps) {
-            setTransformationMethod(new AllCapsTransformationMethod(getContext()));
-        } else {
-            setTransformationMethod(null);
-        }
-    }
-
-    @Override
-    public void setTextAppearance(@NonNull Context context, int resid) {
-        super.setTextAppearance(context, resid);
-        setTextAppearanceInternal(resid);
-    }
-
-    public void setTextAppearance(int resid) {
-        super.setTextAppearance(getContext(), resid);
-        setTextAppearanceInternal(resid);
-    }
-
-    private void setTextAppearanceInternal(int resid) {
-        TypedArray appearance = getContext().obtainStyledAttributes(resid, R.styleable.TextAppearance);
-        if (appearance != null) {
-            for (int i = 0; i < appearance.getIndexCount(); i++) {
-                int attr = appearance.getIndex(i);
-                if (attr == R.styleable.TextAppearance_carbon_textAllCaps) {
-                    setAllCaps(appearance.getBoolean(R.styleable.TextAppearance_carbon_textAllCaps, true));
-                } else if (!isInEditMode() && attr == R.styleable.TextAppearance_carbon_fontPath) {
-                    String path = appearance.getString(attr);
-                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), path);
-                    setTypeface(typeface);
-                } else if (attr == R.styleable.TextAppearance_carbon_fontFamily) {
-                    int textStyle = appearance.getInt(R.styleable.TextAppearance_android_textStyle, 0);
-                    Typeface typeface = TypefaceUtils.getTypeface(getContext(), appearance.getString(attr), textStyle);
-                    setTypeface(typeface);
-                }
-            }
-            appearance.recycle();
-        }
-    }
-
-    @Override
-    public void setError(CharSequence text) {
-        if (text == null) {
-            valid = true;
-            errorMessage = null;
-        } else {
-            errorMessage = text.toString();
-            valid = false;
-        }
-    }
-
-    @Override
-    public void setError(CharSequence error, Drawable icon) {
-        this.setError(error);
-    }
-
-    @Override
-    public void draw(@NonNull Canvas canvas) {
-        super.draw(canvas);
-        if (isInEditMode())
+    public void setPrefix(CharSequence prefix) {
+        this.prefix = prefix;
+        if (TextUtils.isEmpty(prefix)) {
+            prefixLayout = null;
             return;
-
-        CharSequence hint = getHint();
-        if (required && hint.charAt(hint.length() - 1) != '*')
-            setHint(hint + " *");
-        int paddingTop = getPaddingTop() + internalPaddingTop;
-        int paddingBottom = getPaddingBottom() + internalPaddingBottom;
-
-        if (isFocused() && isEnabled()) {
-            paint.setStrokeWidth(2 * getResources().getDimension(R.dimen.carbon_1dip));
-        } else {
-            paint.setStrokeWidth(getResources().getDimension(R.dimen.carbon_1dip));
-        }
-        if (underline) {
-            //if (isEnabled()) {
-            //paint.setShader(null);
-            paint.setColor(backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor()));
-            canvas.drawLine(getScrollX() + getPaddingLeft(), getHeight() - paddingBottom + DIVIDER_PADDING, getScrollX() + getWidth() - getPaddingRight(), getHeight() - paddingBottom + DIVIDER_PADDING, paint);
-         /*   } else {
-                Matrix matrix = new Matrix();
-                matrix.postTranslate(0, getHeight() - paddingBottom + DIVIDER_PADDING - paint.getStrokeWidth() / 2.0f);
-                dashPathShader.setLocalMatrix(matrix);
-                //paint.setShader(dashPathShader);
-                canvas.drawRect(getPaddingLeft(), getHeight() - paddingBottom + DIVIDER_PADDING - paint.getStrokeWidth() / 2.0f,
-                        getWidth() - getPaddingRight(), getHeight() - paddingBottom + DIVIDER_PADDING + paint.getStrokeWidth() / 2.0f, paint);
-            }*/
         }
 
-        if (!valid && errorMessage != null)
-            canvas.drawText(errorMessage, getScrollX() + getPaddingLeft(), getHeight() - paddingBottom + DIVIDER_PADDING + PADDING_ERROR + errorPaint.getTextSize(), errorPaint);
+        TextPaint textPaint = new TextPaint(getPaint());
+        textPaint.setColor(getHintTextColors().getDefaultColor());
+        prefixLayout = new StaticLayout(prefix, textPaint, Integer.MAX_VALUE, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        prefixPadding = (int) prefixLayout.getLineWidth(0);
+        prefixTextPadding = getResources().getDimensionPixelSize(R.dimen.carbon_paddingHalf);
 
-        if (label != null) {
-            if (labelStyle == LabelStyle.Floating) {
-                labelPaint.setColor(tint.getColorForState(getDrawableState(), tint.getDefaultColor()));
-                labelPaint.setAlpha((int) (255 * labelFrac));
-                canvas.drawText(label, getScrollX() + getPaddingLeft(), paddingTop + labelPaint.getTextSize() * (1 - labelFrac) - PADDING_LABEL, labelPaint);
-                if (required && !valid) {
-                    float off = labelPaint.measureText(label + " ");
-                    labelPaint.setColor(tint.getColorForState(new int[]{R.attr.carbon_state_invalid}, tint.getDefaultColor()));
-                    labelPaint.setAlpha((int) (255 * labelFrac));
-                    canvas.drawText("*", getScrollX() + getPaddingLeft() + off, paddingTop + labelPaint.getTextSize() * (1 - labelFrac) - PADDING_LABEL, labelPaint);
-                }
-            } else if (labelStyle == LabelStyle.Persistent) {
-                labelPaint.setColor(tint.getColorForState(getDrawableState(), tint.getDefaultColor()));
-                canvas.drawText(label, getScrollX() + getPaddingLeft(), paddingTop - PADDING_LABEL, labelPaint);
-                if (required && !valid) {
-                    float off = labelPaint.measureText(label + " ");
-                    labelPaint.setColor(tint.getColorForState(new int[]{R.attr.carbon_state_invalid}, tint.getDefaultColor()));
-                    labelPaint.setAlpha((int) (255 * labelFrac));
-                    canvas.drawText("*", getScrollX() + getPaddingLeft() + off, paddingTop - PADDING_LABEL, labelPaint);
-                }
-            }
+        super.setPadding(getPaddingLeft() + prefixPadding + prefixTextPadding, getPaddingTop(), getPaddingRight() + suffixPadding + suffixTextPadding, getPaddingBottom());
+    }
+
+    public CharSequence getSuffix() {
+        return suffix;
+    }
+
+    public void setSuffix(CharSequence suffix) {
+        this.suffix = suffix;
+        if (TextUtils.isEmpty(suffix)) {
+            suffixLayout = null;
+            return;
         }
 
-        counterPaint.setColor(tint.getColorForState(getDrawableState(), tint.getDefaultColor()));
-        int length = getText().length();
-        if (minCharacters > 0 && maxCharacters < Integer.MAX_VALUE) {
-            String text = length + " / " + minCharacters + "-" + maxCharacters;
-            canvas.drawText(text, getScrollX() + getWidth() - counterPaint.measureText(text) - getPaddingRight(), getHeight() - paddingBottom + DIVIDER_PADDING + PADDING_ERROR + counterPaint.getTextSize(), counterPaint);
-        } else if (minCharacters > 0) {
-            String text = length + " / " + minCharacters + "+";
-            canvas.drawText(text, getScrollX() + getWidth() - counterPaint.measureText(text) - getPaddingRight(), getHeight() - paddingBottom + DIVIDER_PADDING + PADDING_ERROR + counterPaint.getTextSize(), counterPaint);
-        } else if (maxCharacters < Integer.MAX_VALUE) {
-            String text = length + " / " + maxCharacters;
-            canvas.drawText(text, getScrollX() + getWidth() - counterPaint.measureText(text) - getPaddingRight(), getHeight() - paddingBottom + DIVIDER_PADDING + PADDING_ERROR + counterPaint.getTextSize(), counterPaint);
-        }
+        int padLeft = getPaddingLeft() - prefixPadding - prefixTextPadding;
+        int padRight = getPaddingRight() - suffixPadding - suffixTextPadding;
 
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
-            rippleDrawable.draw(canvas);
-    }
+        TextPaint textPaint = new TextPaint(getPaint());
+        textPaint.setColor(getHintTextColors().getDefaultColor());
+        suffixLayout = new StaticLayout(suffix, textPaint, Integer.MAX_VALUE, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, true);
+        suffixPadding = (int) suffixLayout.getLineWidth(0);
+        suffixTextPadding = getResources().getDimensionPixelSize(R.dimen.carbon_paddingHalf);
 
-    @Deprecated
-    public boolean isFloatingLabelEnabled() {
-        return labelStyle == LabelStyle.Floating;
-    }
-
-    @Deprecated
-    public void setFloatingLabelEnabled(boolean showFloatingLabel) {
-        this.labelStyle = showFloatingLabel ? LabelStyle.Floating : LabelStyle.Hint;
-    }
-
-    private boolean canShowError() {
-        return (pattern != null || matchingView != 0 || !valid) && errorMessage != null || minCharacters > 0 || maxCharacters < Integer.MAX_VALUE;
-    }
-
-    public boolean isValid() {
-        return valid;
-    }
-
-    public String getPattern() {
-        return pattern.pattern();
-    }
-
-    public void setPattern(final String pattern) {
-        if (pattern == null) {
-            this.pattern = null;
-        } else {
-            this.pattern = Pattern.compile(pattern);
-        }
-    }
-
-    public void setMatchingView(int viewId) {
-        this.matchingView = viewId;
+        super.setPadding(padLeft + prefixPadding + prefixTextPadding, getPaddingTop(), padRight + suffixPadding + suffixTextPadding, getPaddingBottom());
     }
 
     public int getMinCharacters() {
@@ -628,35 +338,271 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
         this.maxCharacters = maxCharacters;
     }
 
-    private void animateFloatingLabel(boolean visible) {
-        ValueAnimator animator;
-        if (visible) {
-            animator = ValueAnimator.ofFloat(labelFrac, 1);
-            animator.setDuration((long) ((1 - labelFrac) * 200));
-        } else {
-            animator = ValueAnimator.ofFloat(labelFrac, 0);
-            animator.setDuration((long) (labelFrac * 200));
-        }
-        animator.setInterpolator(new DecelerateInterpolator());
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                labelFrac = (float) animation.getAnimatedValue();
-                postInvalidate();
+    public boolean isRequired() {
+        return required;
+    }
+
+    /**
+     * Sets it the underlying InputView has to be not empty. Adds an asterisk to hint text and label
+     * text
+     *
+     * @param required
+     */
+    public void setRequired(boolean required) {
+        this.required = required;
+    }
+
+    public void validate() {
+        boolean v = validateInternal();
+        for (OnValidateListener validateListener : validateListeners) {
+            if (!validateListener.onValidate()) {
+                v = false;
+                break;
             }
+        }
+        setValid(v);
+    }
+
+    private boolean validateInternal() {
+        String s = getText().toString();
+        // dictionary suggestions vs s.length()>0
+        /*try {
+            Field mTextField = getText().getClass().getDeclaredField("mText");
+            mTextField.setAccessible(true);
+            s = new String((char[])mTextField.get(getText()));
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }*/
+        boolean drawPatternOk = true, drawMatchingViewError = false, requiredOk = !required || !s.isEmpty();
+        boolean counterError = (minCharacters > 0 && s.length() < minCharacters || maxCharacters < Integer.MAX_VALUE && s.length() > maxCharacters);
+
+        if (pattern != null)
+            drawPatternOk = pattern.matcher(s).matches();
+        if (matchingView != 0) {
+            View view = getRootView().findViewById(matchingView);
+            if (view instanceof TextView) {
+                TextView matchingTextView = (TextView) view;
+                if (!matchingTextView.getText().toString().equals(getText().toString()))
+                    drawMatchingViewError = true;
+            }
+        }
+
+        return requiredOk && !drawMatchingViewError && drawPatternOk && !counterError;
+    }
+
+    public void addOnValidateListener(@NonNull OnValidateListener listener) {
+        validateListeners.add(listener);
+    }
+
+    public void removeOnValidateListener(@NonNull OnValidateListener listener) {
+        validateListeners.remove(listener);
+    }
+
+    public void clearOnValidateListeners() {
+        validateListeners.clear();
+    }
+
+    public void setOnFocusGainedListener(OnFocusGainedListener listener) {
+        setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus)
+                listener.onFocusGained();
         });
-        animator.start();
+    }
+
+    public void setOnFocusLostListener(OnFocusLostListener listener) {
+        setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus)
+                listener.onFocusLost();
+        });
+    }
+
+    /**
+     * Changes text transformation method to caps.
+     *
+     * @param allCaps if true, TextView will automatically capitalize all characters
+     */
+    public void setAllCaps(boolean allCaps) {
+        if (allCaps) {
+            setTransformationMethod(new AllCapsTransformationMethod(getContext()));
+        } else {
+            setTransformationMethod(null);
+        }
+    }
+
+    public void setLineHeight(int lineHeight) {
+        final int fontHeight = getPaint().getFontMetricsInt(null);
+        if (lineHeight != fontHeight)
+            setLineSpacing(lineHeight - fontHeight, 1f);
     }
 
     @Override
-    protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
-        super.onFocusChanged(focused, direction, previouslyFocusedRect);
-        if (labelStyle == LabelStyle.Floating)
-            animateFloatingLabel(focused && getText().length() > 0);
-        if (!focused) {
-            afterFirstInteraction = true;
-            validateInternalEvent();
+    public void setTextColor(@NonNull ColorStateList colors) {
+        super.setTextColor(animateColorChanges && !(colors instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(colors, textColorAnimatorListener) : colors);
+    }
+
+    @Override
+    public void setTextAppearance(@NonNull Context context, @StyleRes int resId) {
+        super.setTextAppearance(context, resId);
+        Carbon.setTextAppearance(this, resId, false, false);
+    }
+
+    public void setTextAppearance(@StyleRes int resId) {
+        super.setTextAppearance(getContext(), resId);
+        Carbon.setTextAppearance(this, resId, false, false);
+    }
+
+    @Override
+    public void setValid(boolean valid) {
+        if (this.valid == valid)
+            return;
+        this.valid = valid;
+        for (OnValidChangedListener listener : validChangedListeners)
+            listener.onValidChanged(valid);
+        refreshDrawableState();
+    }
+
+    public boolean isValid() {
+        return valid;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return getText().length() == 0;
+    }
+
+    @Override
+    public void addOnValidChangedListener(@NotNull OnValidChangedListener listener) {
+        validChangedListeners.add(listener);
+    }
+
+    @Override
+    public void removeOnValidChangedListener(@NotNull OnValidChangedListener listener) {
+        validChangedListeners.remove(listener);
+    }
+
+    @Override
+    public void clearOnValidChangedListeners() {
+        validChangedListeners.clear();
+    }
+
+    RevealAnimator revealAnimator;
+
+    public Point getLocationOnScreen() {
+        int[] outLocation = new int[2];
+        super.getLocationOnScreen(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    public Point getLocationInWindow() {
+        int[] outLocation = new int[2];
+        super.getLocationInWindow(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    @NotNull
+    public Animator createCircularReveal(android.view.View hotspot, float startRadius, float finishRadius) {
+        int[] location = new int[2];
+        hotspot.getLocationOnScreen(location);
+        int[] myLocation = new int[2];
+        getLocationOnScreen(myLocation);
+        return createCircularReveal(location[0] - myLocation[0] + hotspot.getWidth() / 2, location[1] - myLocation[1] + hotspot.getHeight() / 2, startRadius, finishRadius);
+    }
+
+    @NotNull
+    @Override
+    public Animator createCircularReveal(int x, int y, float startRadius, float finishRadius) {
+        startRadius = Carbon.getRevealRadius(this, x, y, startRadius);
+        finishRadius = Carbon.getRevealRadius(this, x, y, finishRadius);
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            Animator circularReveal = ViewAnimationUtils.createCircularReveal(this, x, y, startRadius, finishRadius);
+            circularReveal.setDuration(Carbon.getDefaultRevealDuration());
+            return circularReveal;
+        } else {
+            revealAnimator = new RevealAnimator(x, y, startRadius, finishRadius);
+            revealAnimator.setDuration(Carbon.getDefaultRevealDuration());
+            revealAnimator.addUpdateListener(animation -> {
+                RevealAnimator reveal = ((RevealAnimator) animation);
+                reveal.radius = (float) reveal.getAnimatedValue();
+                reveal.mask.reset();
+                reveal.mask.addCircle(reveal.x, reveal.y, Math.max((Float) reveal.getAnimatedValue(), 1), Path.Direction.CW);
+                postInvalidate();
+            });
+            revealAnimator.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    revealAnimator = null;
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    revealAnimator = null;
+                }
+            });
+            return revealAnimator;
         }
+    }
+
+    public String getPattern() {
+        return pattern.pattern();
+    }
+
+    public void setPattern(final String pattern) {
+        if (pattern == null) {
+            this.pattern = null;
+        } else {
+            this.pattern = Pattern.compile(pattern);
+        }
+    }
+
+    public void setMatchingView(int viewId) {
+        this.matchingView = viewId;
+    }
+
+    @Deprecated
+    public void setClearFocusOnTouchOutside(boolean enabled) {
+    }
+
+
+    // -------------------------------
+    // corners
+    // -------------------------------
+
+    private RectF boundsRect = new RectF();
+    private Path cornersMask = new Path();
+
+    @NotNull
+    public ShapeAppearanceModel getShapeModel() {
+        return shapeModel;
+    }
+
+
+    /**
+     * Sets the corner radius. If corner radius is equal to 0, rounded corners are turned off.
+     *
+     * @param cornerRadius
+     */
+    @Override
+    public void setCornerRadius(float cornerRadius) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new RoundedCornerTreatment(cornerRadius)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setCornerCut(float cornerCut) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new CutCornerTreatment(cornerCut)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setShapeModel(@NotNull ShapeAppearanceModel model) {
+        this.shapeModel = model;
+        shadowDrawable = new MaterialShapeDrawable(shapeModel);
+        if (getWidth() > 0 && getHeight() > 0)
+            updateCorners();
+        if (!Carbon.IS_LOLLIPOP_OR_HIGHER)
+            postInvalidate();
     }
 
     @Override
@@ -669,42 +615,119 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
         if (getWidth() == 0 || getHeight() == 0)
             return;
 
+        updateCorners();
+
         if (rippleDrawable != null)
             rippleDrawable.setBounds(0, 0, getWidth(), getHeight());
     }
 
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int paddingTop = getPaddingTop();
-        int paddingBottom = getPaddingBottom();
-        if (labelStyle != LabelStyle.Hint)
-            internalPaddingTop = (int) (PADDING_LABEL + labelPaint.getTextSize());
-        if (canShowError()) {
-            internalPaddingBottom = (int) (errorPaint.getTextSize());
-            if (!underline)
-                internalPaddingBottom += PADDING_ERROR;
+    private void updateCorners() {
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (!Carbon.isShapeRect(shapeModel, boundsRect))
+                setClipToOutline(true);
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    if (Carbon.isShapeRect(shapeModel, boundsRect)) {
+                        outline.setRect(0, 0, getWidth(), getHeight());
+                    } else {
+                        shadowDrawable.setBounds(0, 0, getWidth(), getHeight());
+                        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_NEVER);
+                        shadowDrawable.getOutline(outline);
+                    }
+                }
+            });
         }
-        setPadding(getPaddingLeft(), paddingTop, getPaddingRight(), paddingBottom);
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+
+        boundsRect.set(shadowDrawable.getBounds());
+        shadowDrawable.getPathForSize(getWidth(), getHeight(), cornersMask);
     }
 
+    public void drawInternal(@NonNull Canvas canvas) {
+        super.draw(canvas);
+        if (prefixLayout != null) {
+            canvas.translate(getPaddingLeft() - prefixPadding - prefixTextPadding, getBaseline() - prefixLayout.getLineBaseline(0));
+            prefixLayout.draw(canvas);
+            canvas.translate(-getPaddingLeft() + prefixPadding + prefixTextPadding, -getBaseline() + prefixLayout.getLineBaseline(0));
+        }
+        if (suffixLayout != null) {
+            canvas.translate(getWidth() - getPaddingLeft() - getPaddingRight() + suffixPadding + suffixTextPadding, getBaseline() - suffixLayout.getLineBaseline(0));
+            suffixLayout.draw(canvas);
+            canvas.translate(-getWidth() + getPaddingLeft() + getPaddingRight() - suffixPadding - suffixTextPadding, -getBaseline() + suffixLayout.getLineBaseline(0));
+        }
+
+        if (isFocused() && isEnabled()) {
+            paint.setStrokeWidth(2 * getResources().getDimension(R.dimen.carbon_1dip));
+        } else {
+            paint.setStrokeWidth(getResources().getDimension(R.dimen.carbon_1dip));
+        }
+
+        if (stroke != null)
+            drawStroke(canvas);
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+            rippleDrawable.draw(canvas);
+    }
+
+    @SuppressLint("MissingSuperCall")
     @Override
-    public int getPaddingBottom() {
-        return super.getPaddingBottom() - internalPaddingBottom;
-    }
+    public void draw(@NonNull Canvas canvas) {
+        boolean r = revealAnimator != null;
+        boolean c = !Carbon.isShapeRect(shapeModel, boundsRect);
 
-    @Override
-    public int getPaddingTop() {
-        return super.getPaddingTop() - internalPaddingTop;
-    }
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            if (spotShadowColor != null)
+                super.setOutlineSpotShadowColor(spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()));
+            if (ambientShadowColor != null)
+                super.setOutlineAmbientShadowColor(ambientShadowColor.getColorForState(getDrawableState(), ambientShadowColor.getDefaultColor()));
+        }
 
-    int getInternalPaddingTop() {
-        return internalPaddingTop;
-    }
+        if (isInEditMode()) {
+            if ((r || c) && getWidth() > 0 && getHeight() > 0) {
+                Bitmap layer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+                Canvas layerCanvas = new Canvas(layer);
+                drawInternal(layerCanvas);
 
-    @Override
-    public void setPadding(int left, int top, int right, int bottom) {
-        super.setPadding(left, top + internalPaddingTop, right, bottom + internalPaddingBottom);
+                Bitmap mask = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+                Canvas maskCanvas = new Canvas(mask);
+                Paint maskPaint = new Paint(0xffffffff);
+                maskCanvas.drawPath(cornersMask, maskPaint);
+
+                for (int x = 0; x < getWidth(); x++) {
+                    for (int y = 0; y < getHeight(); y++) {
+                        int maskPixel = mask.getPixel(x, y);
+                        layer.setPixel(x, y, Color.alpha(maskPixel) > 0 ? layer.getPixel(x, y) : 0);
+                    }
+                }
+                canvas.drawBitmap(layer, 0, 0, paint);
+            } else {
+                drawInternal(canvas);
+            }
+        } else if (getWidth() > 0 && getHeight() > 0 && (((r || c) && !Carbon.IS_LOLLIPOP_OR_HIGHER) || !shapeModel.isRoundRect(boundsRect))) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            if (r) {
+                int saveCount2 = canvas.save();
+                canvas.clipRect(revealAnimator.x - revealAnimator.radius, revealAnimator.y - revealAnimator.radius, revealAnimator.x + revealAnimator.radius, revealAnimator.y + revealAnimator.radius);
+                drawInternal(canvas);
+                canvas.restoreToCount(saveCount2);
+            } else {
+                drawInternal(canvas);
+            }
+
+            paint.setXfermode(Carbon.CLEAR_MODE);
+            if (c) {
+                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
+                canvas.drawPath(cornersMask, paint);
+            }
+            if (r)
+                canvas.drawPath(revealAnimator.mask, paint);
+            paint.setXfermode(null);    // TODO check if this is needed
+
+            canvas.restoreToCount(saveCount);
+            paint.setXfermode(null);
+        } else {
+            drawInternal(canvas);
+        }
     }
 
 
@@ -713,21 +736,12 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     // -------------------------------
 
     private RippleDrawable rippleDrawable;
-    private EmptyDrawable emptyBackground = new EmptyDrawable();
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        if (clearButton != null && event.getX() > getWidth() - clearButton.getBounds().width()) {
-            clearButton.setState(getDrawableState());
-        }
-        if (showPasswordButton != null && event.getX() > getWidth() - showPasswordButton.getBounds().width()) {
-            showPasswordButton.setState(getDrawableState());
-        }
-        return super.onTouchEvent(event);
-    }
 
     @Override
     public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        if (shadowDrawable.isPointInTransparentRegion((int) event.getX(), (int) event.getY()))
+            return false;
+
         if (rippleDrawable != null && event.getAction() == MotionEvent.ACTION_DOWN)
             rippleDrawable.setHotspot(event.getX(), event.getY());
         return super.dispatchTouchEvent(event);
@@ -738,16 +752,19 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
         return rippleDrawable;
     }
 
+    @Override
     public void setRippleDrawable(RippleDrawable newRipple) {
         if (rippleDrawable != null) {
             rippleDrawable.setCallback(null);
             if (rippleDrawable.getStyle() == RippleDrawable.Style.Background)
-                super.setBackgroundDrawable(rippleDrawable.getBackground() == null ? emptyBackground : rippleDrawable.getBackground());
+                super.setBackgroundDrawable(rippleDrawable.getBackground());
         }
 
         if (newRipple != null) {
             newRipple.setCallback(this);
             newRipple.setBounds(0, 0, getWidth(), getHeight());
+            newRipple.setState(getDrawableState());
+            ((Drawable) newRipple).setVisible(getVisibility() == VISIBLE, false);
             if (newRipple.getStyle() == RippleDrawable.Style.Background)
                 super.setBackgroundDrawable((Drawable) newRipple);
         }
@@ -756,88 +773,66 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     }
 
     @Override
-    protected boolean verifyDrawable(Drawable who) {
+    protected boolean verifyDrawable(@NonNull Drawable who) {
         return super.verifyDrawable(who) || rippleDrawable == who;
     }
 
     @Override
     public void invalidateDrawable(@NonNull Drawable drawable) {
         super.invalidateDrawable(drawable);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate();
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate(@NonNull Rect dirty) {
         super.invalidate(dirty);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(dirty);
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate(int l, int t, int r, int b) {
         super.invalidate(l, t, r, b);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(l, t, r, b);
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate() {
         super.invalidate();
+        invalidateParentIfNeeded();
+    }
+
+    private void invalidateParentIfNeeded() {
         if (getParent() == null || !(getParent() instanceof View))
             return;
 
         if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
+            ((View) getParent()).invalidate();
+
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
             ((View) getParent()).invalidate();
     }
 
     @Override
     public void postInvalidateDelayed(long delayMilliseconds) {
         super.postInvalidateDelayed(delayMilliseconds);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
     }
 
     @Override
     public void postInvalidateDelayed(long delayMilliseconds, int left, int top, int right, int bottom) {
         super.postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
     }
 
-    @Override
-    public void postInvalidate() {
-        super.postInvalidate();
+    private void postInvalidateParentIfNeededDelayed(long delayMilliseconds) {
         if (getParent() == null || !(getParent() instanceof View))
             return;
 
         if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate();
-    }
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
 
-    @Override
-    public void postInvalidate(int left, int top, int right, int bottom) {
-        super.postInvalidate(left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate(left, top, right, bottom);
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
     }
 
     @Override
@@ -856,7 +851,194 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
             rippleDrawable.setCallback(null);
             rippleDrawable = null;
         }
-        super.setBackgroundDrawable(background == null ? emptyBackground : background);
+        super.setBackgroundDrawable(background);
+        updateBackgroundTint();
+    }
+
+    @Override
+    public void setCompoundDrawables(@Nullable Drawable left, @Nullable Drawable top, @Nullable Drawable right, @Nullable Drawable bottom) {
+        super.setCompoundDrawables(
+                left != null ? DrawableCompat.wrap(left) : null,
+                top != null ? DrawableCompat.wrap(top) : null,
+                right != null ? DrawableCompat.wrap(right) : null,
+                bottom != null ? DrawableCompat.wrap(bottom) : null);
+        updateTint();
+    }
+
+
+    // -------------------------------
+    // elevation
+    // -------------------------------
+
+    private float elevation = 0;
+    private float translationZ = 0;
+    private ShapeAppearanceModel shapeModel = new ShapeAppearanceModel();
+    private MaterialShapeDrawable shadowDrawable = new MaterialShapeDrawable(shapeModel);
+    private ColorStateList ambientShadowColor, spotShadowColor;
+
+    @Override
+    public float getElevation() {
+        return elevation;
+    }
+
+    @Override
+    public void setElevation(float elevation) {
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setElevation(elevation);
+            super.setTranslationZ(translationZ);
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setElevation(elevation);
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setElevation(0);
+                super.setTranslationZ(0);
+            }
+        } else if (elevation != this.elevation && getParent() != null) {
+            ((View) getParent()).postInvalidate();
+        }
+        this.elevation = elevation;
+    }
+
+    @Override
+    public float getTranslationZ() {
+        return translationZ;
+    }
+
+    public void setTranslationZ(float translationZ) {
+        if (translationZ == this.translationZ)
+            return;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setTranslationZ(translationZ);
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setTranslationZ(0);
+            }
+        } else if (translationZ != this.translationZ && getParent() != null) {
+            ((View) getParent()).postInvalidate();
+        }
+        this.translationZ = translationZ;
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+    }
+
+    @Override
+    public boolean hasShadow() {
+        return getElevation() + getTranslationZ() >= 0.01f && getWidth() > 0 && getHeight() > 0;
+    }
+
+    @Override
+    public void drawShadow(@NotNull Canvas canvas) {
+        float alpha = getAlpha() * Carbon.getBackgroundTintAlpha(this) / 255.0f;
+        if (alpha == 0 || !hasShadow())
+            return;
+
+        float z = getElevation() + getTranslationZ();
+
+        int saveCount;
+        boolean maskShadow = getBackground() != null && alpha != 1;
+        boolean r = revealAnimator != null && revealAnimator.isRunning();
+
+        if (alpha != 1.0f) {
+            paint.setAlpha((int) (255 * alpha));
+            saveCount = canvas.saveLayer(-z, -z, canvas.getWidth() + z, canvas.getHeight() + z, paint, Canvas.ALL_SAVE_FLAG);
+        } else {
+            saveCount = canvas.save();
+        }
+
+        if (r) {
+            canvas.clipRect(
+                    getLeft() + revealAnimator.x - revealAnimator.radius, getTop() + revealAnimator.y - revealAnimator.radius,
+                    getLeft() + revealAnimator.x + revealAnimator.radius, getTop() + revealAnimator.y + revealAnimator.radius);
+        }
+
+        shadowDrawable.setFillColor(spotShadowColor);
+        shadowDrawable.setShadowColor(spotShadowColor != null ? spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()) : 0xff000000);
+        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_ALWAYS);
+        shadowDrawable.setAlpha(0x44);
+        shadowDrawable.setElevation(z);
+        shadowDrawable.setShadowVerticalOffset(0);
+        shadowDrawable.setBounds(getLeft(), (int) (getTop() + z / 4), getRight(), (int) (getBottom() + z / 4));
+        shadowDrawable.draw(canvas);
+
+        canvas.translate(this.getLeft(), this.getTop());
+        paint.setXfermode(Carbon.CLEAR_MODE);
+        if (maskShadow) {
+            cornersMask.setFillType(Path.FillType.WINDING);
+            canvas.drawPath(cornersMask, paint);
+        }
+        if (r)
+            canvas.drawPath(revealAnimator.mask, paint);
+
+        canvas.restoreToCount(saveCount);
+        paint.setXfermode(null);
+        paint.setAlpha(255);
+    }
+
+    @Override
+    public void setElevationShadowColor(ColorStateList shadowColor) {
+        ambientShadowColor = spotShadowColor = shadowColor;
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public void setElevationShadowColor(int color) {
+        ambientShadowColor = spotShadowColor = ColorStateList.valueOf(color);
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public ColorStateList getElevationShadowColor() {
+        return ambientShadowColor;
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(int color) {
+        setOutlineAmbientShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(ColorStateList color) {
+        ambientShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineAmbientShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineAmbientShadowColor() {
+        return ambientShadowColor.getDefaultColor();
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(int color) {
+        setOutlineSpotShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(ColorStateList color) {
+        spotShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineSpotShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineSpotShadowColor() {
+        return spotShadowColor.getDefaultColor();
     }
 
 
@@ -864,11 +1046,11 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     // touch margin
     // -------------------------------
 
-    private Rect touchMargin;
+    private Rect touchMargin = new Rect();
 
     @Override
     public void setTouchMargin(int left, int top, int right, int bottom) {
-        touchMargin = new Rect(left, top, right, bottom);
+        touchMargin.set(left, top, right, bottom);
     }
 
     @Override
@@ -891,17 +1073,28 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
         touchMargin.bottom = margin;
     }
 
+    @NotNull
     @Override
     public Rect getTouchMargin() {
         return touchMargin;
     }
 
+    final RectF tmpHitRect = new RectF();
+
     public void getHitRect(@NonNull Rect outRect) {
-        if (touchMargin == null) {
-            super.getHitRect(outRect);
-            return;
+        Matrix matrix = getMatrix();
+        if (matrix.isIdentity()) {
+            outRect.set(getLeft(), getTop(), getRight(), getBottom());
+        } else {
+            tmpHitRect.set(0, 0, getWidth(), getHeight());
+            matrix.mapRect(tmpHitRect);
+            outRect.set((int) tmpHitRect.left + getLeft(), (int) tmpHitRect.top + getTop(),
+                    (int) tmpHitRect.right + getLeft(), (int) tmpHitRect.bottom + getTop());
         }
-        outRect.set(getLeft() - touchMargin.left, getTop() - touchMargin.top, getRight() + touchMargin.right, getBottom() + touchMargin.bottom);
+        outRect.left -= touchMargin.left;
+        outRect.top -= touchMargin.top;
+        outRect.right += touchMargin.right;
+        outRect.bottom += touchMargin.bottom;
     }
 
 
@@ -911,6 +1104,7 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
 
     private StateAnimator stateAnimator = new StateAnimator(this);
 
+    @NotNull
     @Override
     public StateAnimator getStateAnimator() {
         return stateAnimator;
@@ -928,79 +1122,110 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
             ((AnimatedColorStateList) textColors).setState(getDrawableState());
         if (tint != null && tint instanceof AnimatedColorStateList)
             ((AnimatedColorStateList) tint).setState(getDrawableState());
-        if (backgroundTint!= null && backgroundTint instanceof AnimatedColorStateList)
+        if (backgroundTint != null && backgroundTint instanceof AnimatedColorStateList)
             ((AnimatedColorStateList) backgroundTint).setState(getDrawableState());
     }
 
+    private static final int[] INVALID_STATE_SET = {
+            R.attr.carbon_state_invalid
+    };
+
     @Override
     protected int[] onCreateDrawableState(int extraSpace) {
-        int[] drawableState = super.onCreateDrawableState(extraSpace + 1);
-        drawableState[drawableState.length - 1] = valid ? -R.attr.carbon_state_invalid : R.attr.carbon_state_invalid;
-        return drawableState;
+        if (!isValid()) {
+            final int[] drawableState = super.onCreateDrawableState(extraSpace + 1);
+            mergeDrawableStates(drawableState, INVALID_STATE_SET);
+            return drawableState;
+        }
+        return super.onCreateDrawableState(extraSpace);
     }
+
 
     // -------------------------------
     // animations
     // -------------------------------
 
-    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
+    private Animator inAnim = null, outAnim = null;
     private Animator animator;
 
-    public void setVisibility(final int visibility) {
+    public Animator animateVisibility(final int visibility) {
         if (visibility == View.VISIBLE && (getVisibility() != View.VISIBLE || animator != null)) {
             if (animator != null)
                 animator.cancel();
-            if (inAnim != AnimUtils.Style.None) {
-                animator = AnimUtils.animateIn(this, inAnim, new AnimatorListenerAdapter() {
+            if (inAnim != null) {
+                animator = inAnim;
+                animator.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator a) {
+                        a.removeListener(this);
                         animator = null;
-                        clearAnimation();
+                    }
+
+                    @Override
+                    public void onAnimationCancel(Animator a) {
+                        a.removeListener(this);
+                        animator = null;
                     }
                 });
+                animator.start();
             }
-            super.setVisibility(visibility);
+            setVisibility(visibility);
         } else if (visibility != View.VISIBLE && (getVisibility() == View.VISIBLE || animator != null)) {
             if (animator != null)
                 animator.cancel();
-            if (outAnim == AnimUtils.Style.None) {
-                super.setVisibility(visibility);
-                return;
+            if (outAnim == null) {
+                setVisibility(visibility);
+                return null;
             }
-            animator = AnimUtils.animateOut(this, outAnim, new AnimatorListenerAdapter() {
+            animator = outAnim;
+            animator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator a) {
                     if (((ValueAnimator) a).getAnimatedFraction() == 1)
-                        EditText.super.setVisibility(visibility);
+                        setVisibility(visibility);
+                    a.removeListener(this);
                     animator = null;
-                    clearAnimation();
+                }
+
+                @Override
+                public void onAnimationCancel(Animator a) {
+                    a.removeListener(this);
+                    animator = null;
                 }
             });
+            animator.start();
+        } else {
+            setVisibility(visibility);
         }
-    }
-
-    public void setVisibilityImmediate(final int visibility) {
-        super.setVisibility(visibility);
+        return animator;
     }
 
     public Animator getAnimator() {
         return animator;
     }
 
-    public AnimUtils.Style getOutAnimation() {
+    public Animator getOutAnimator() {
         return outAnim;
     }
 
-    public void setOutAnimation(AnimUtils.Style outAnim) {
+    public void setOutAnimator(Animator outAnim) {
+        if (this.outAnim != null)
+            this.outAnim.setTarget(null);
         this.outAnim = outAnim;
+        if (outAnim != null)
+            outAnim.setTarget(this);
     }
 
-    public AnimUtils.Style getInAnimation() {
+    public Animator getInAnimator() {
         return inAnim;
     }
 
-    public void setInAnimation(AnimUtils.Style inAnim) {
+    public void setInAnimator(Animator inAnim) {
+        if (this.inAnim != null)
+            this.inAnim.setTarget(null);
         this.inAnim = inAnim;
+        if (inAnim != null)
+            inAnim.setTarget(this);
     }
 
 
@@ -1013,40 +1238,25 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     ColorStateList backgroundTint;
     PorterDuff.Mode backgroundTintMode;
     boolean animateColorChanges;
-    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateTint();
-            ViewCompat.postInvalidateOnAnimation(EditText.this);
-        }
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = animation -> {
+        updateTint();
+        ViewCompat.postInvalidateOnAnimation(this);
     };
-    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateBackgroundTint();
-            ViewCompat.postInvalidateOnAnimation(EditText.this);
-        }
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = animation -> {
+        updateBackgroundTint();
+        ViewCompat.postInvalidateOnAnimation(this);
     };
-    ValueAnimator.AnimatorUpdateListener textColorAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            setHintTextColor(getHintTextColors());
-        }
-    };
+    ValueAnimator.AnimatorUpdateListener textColorAnimatorListener = animation -> setHintTextColor(getHintTextColors());
 
     @Override
-    public void setTint(ColorStateList list) {
-        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
+    public void setTintList(ColorStateList list) {
+        this.tint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
         updateTint();
     }
 
     @Override
     public void setTint(int color) {
-        if (color == 0) {
-            setTint(new DefaultColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
+        setTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -1057,14 +1267,23 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     private void updateTint() {
         Drawable[] drawables = getCompoundDrawables();
         if (tint != null && tintMode != null) {
-            int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
-            for (Drawable d : drawables)
-                if (d != null)
-                    d.setColorFilter(new PorterDuffColorFilter(color, tintMode));
+            for (Drawable drawable : drawables) {
+                if (drawable != null) {
+                    Carbon.setTintListMode(drawable, tint, tintMode);
+
+                    if (drawable.isStateful())
+                        drawable.setState(getDrawableState());
+                }
+            }
         } else {
-            for (Drawable d : drawables)
-                if (d != null)
-                    d.setColorFilter(null);
+            for (Drawable drawable : drawables) {
+                if (drawable != null) {
+                    Carbon.clearTint(drawable);
+
+                    if (drawable.isStateful())
+                        drawable.setState(getDrawableState());
+                }
+            }
         }
     }
 
@@ -1080,18 +1299,14 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     }
 
     @Override
-    public void setBackgroundTint(ColorStateList list) {
-        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+    public void setBackgroundTintList(ColorStateList list) {
+        this.backgroundTint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
         updateBackgroundTint();
     }
 
     @Override
     public void setBackgroundTint(int color) {
-        if (color == 0) {
-            setBackgroundTint(new DefaultColorStateList(getContext()));
-        } else {
-            setBackgroundTint(ColorStateList.valueOf(color));
-        }
+        setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -1100,18 +1315,24 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     }
 
     private void updateBackgroundTint() {
-        if (getBackground() == null)
+        Drawable background = getBackground();
+        if (background instanceof RippleDrawable)
+            background = ((RippleDrawable) background).getBackground();
+        if (background == null)
             return;
+
         if (backgroundTint != null && backgroundTintMode != null) {
-            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
-            getBackground().setColorFilter(new PorterDuffColorFilter(color, backgroundTintMode));
+            Carbon.setTintListMode(background, backgroundTint, backgroundTintMode);
         } else {
-            getBackground().setColorFilter(null);
+            Carbon.clearTint(background);
         }
+
+        if (background.isStateful())
+            background.setState(getDrawableState());
     }
 
     @Override
-    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+    public void setBackgroundTintMode(@Nullable PorterDuff.Mode mode) {
         this.backgroundTintMode = mode;
         updateBackgroundTint();
     }
@@ -1126,13 +1347,288 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     }
 
     public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        if (this.animateColorChanges == animateColorChanges)
+            return;
         this.animateColorChanges = animateColorChanges;
-        if (tint != null && !(tint instanceof AnimatedColorStateList))
-            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
-        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
-            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
-        if (!(getTextColors() instanceof AnimatedColorStateList))
-            setTextColor(AnimatedColorStateList.fromList(getTextColors(), textColorAnimatorListener));
+        setTintList(tint);
+        setBackgroundTintList(backgroundTint);
+        setTextColor(getTextColors());
+    }
+
+
+    // -------------------------------
+    // stroke
+    // -------------------------------
+
+    private ColorStateList stroke;
+    private float strokeWidth;
+    private Paint strokePaint;
+
+    private void drawStroke(Canvas canvas) {
+        strokePaint.setStrokeWidth(strokeWidth * 2);
+        strokePaint.setColor(stroke.getColorForState(getDrawableState(), stroke.getDefaultColor()));
+        cornersMask.setFillType(Path.FillType.WINDING);
+        canvas.drawPath(cornersMask, strokePaint);
+    }
+
+    @Override
+    public void setStroke(ColorStateList colorStateList) {
+        stroke = colorStateList;
+
+        if (stroke == null)
+            return;
+
+        if (strokePaint == null) {
+            strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+        }
+    }
+
+    @Override
+    public void setStroke(int color) {
+        setStroke(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public ColorStateList getStroke() {
+        return stroke;
+    }
+
+    @Override
+    public void setStrokeWidth(float strokeWidth) {
+        this.strokeWidth = strokeWidth;
+    }
+
+    @Override
+    public float getStrokeWidth() {
+        return strokeWidth;
+    }
+
+
+    // -------------------------------
+    // maximum width & height
+    // -------------------------------
+
+    int maxWidth = Integer.MAX_VALUE, maxHeight = Integer.MAX_VALUE;
+
+    @Override
+    public int getMaxWidth() {
+        return maxWidth;
+    }
+
+    @Override
+    public void setMaxWidth(int maxWidth) {
+        this.maxWidth = maxWidth;
+        requestLayout();
+    }
+
+    @Override
+    public int getMaxHeight() {
+        return maxHeight;
+    }
+
+    @Override
+    public void setMaxHeight(int maxHeight) {
+        this.maxHeight = maxHeight;
+        requestLayout();
+    }
+
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (getMeasuredWidth() > maxWidth || getMeasuredHeight() > maxHeight) {
+            if (getMeasuredWidth() > maxWidth)
+                widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.EXACTLY);
+            if (getMeasuredHeight() > maxHeight)
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.EXACTLY);
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+    }
+
+
+    // -------------------------------
+    // auto size
+    // -------------------------------
+
+    private AutoSizeTextMode autoSizeText = AutoSizeTextMode.None;
+    private float minTextSize, maxTextSize, autoSizeStepGranularity;
+    private float[] autoSizeStepPresets;
+
+    private RectF textRect = new RectF();
+    private RectF availableSpaceRect = new RectF();
+    private float spacingMult = 1.0f;
+    private float spacingAdd = 0.0f;
+    private int maxLines = -1;
+
+    @NonNull
+    public AutoSizeTextMode getAutoSizeText() {
+        return autoSizeText;
+    }
+
+    public void setAutoSizeText(@NonNull AutoSizeTextMode autoSizeText) {
+        this.autoSizeText = autoSizeText;
+        adjustTextSize();
+    }
+
+    @Override
+    public void setText(final CharSequence text, BufferType type) {
+        skipValidate = true;
+        super.setText(text, type);
+        skipValidate = false;
+        adjustTextSize();
+    }
+
+    @Override
+    public void setTextSize(float size) {
+        super.setTextSize(size);
+        adjustTextSize();
+    }
+
+    @Override
+    public void setMaxLines(int maxLines) {
+        super.setMaxLines(maxLines);
+        this.maxLines = maxLines;
+        adjustTextSize();
+    }
+
+    @Override
+    public void setSingleLine() {
+        super.setSingleLine();
+        adjustTextSize();
+    }
+
+    @Override
+    public void setSingleLine(boolean singleLine) {
+        super.setSingleLine(singleLine);
+        if (!singleLine)
+            super.setMaxLines(-1);
+        adjustTextSize();
+    }
+
+    @Override
+    public void setLines(int lines) {
+        super.setLines(lines);
+        adjustTextSize();
+    }
+
+    @Override
+    public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, size);
+        adjustTextSize();
+    }
+
+    @Override
+    public void setLineSpacing(float add, float mult) {
+        super.setLineSpacing(add, mult);
+        spacingMult = mult;
+        spacingAdd = add;
+    }
+
+    private void initAutoSize() {
+        if (autoSizeText == AutoSizeTextMode.Uniform && minTextSize > 0 && maxTextSize > 0) {
+            autoSizeStepPresets = new float[(int) Math.ceil((maxTextSize - minTextSize) / autoSizeStepGranularity) + 1];
+            for (int i = 0; i < autoSizeStepPresets.length - 1; i++)
+                autoSizeStepPresets[i] = minTextSize + autoSizeStepGranularity * i;
+            autoSizeStepPresets[autoSizeStepPresets.length - 1] = maxTextSize;
+        }
+    }
+
+    public float getMinTextSize() {
+        return minTextSize;
+    }
+
+    public void setMinTextSize(float minTextSize) {
+        this.minTextSize = minTextSize;
+        autoSizeStepPresets = null;
+        adjustTextSize();
+    }
+
+    public float getMaxTextSize() {
+        return maxTextSize;
+    }
+
+    public int getAutoSizeStepGranularity() {
+        return (int) autoSizeStepGranularity;
+    }
+
+    public void setAutoSizeStepGranularity(int autoSizeStepGranularity) {
+        setAutoSizeStepGranularity((float) autoSizeStepGranularity);
+    }
+
+    public void setAutoSizeStepGranularity(float autoSizeStepGranularity) {
+        this.autoSizeStepGranularity = autoSizeStepGranularity;
+        autoSizeStepPresets = null;
+        adjustTextSize();
+    }
+
+    public void setMaxTextSize(float maxTextSize) {
+        this.maxTextSize = maxTextSize;
+        autoSizeStepPresets = null;
+        adjustTextSize();
+    }
+
+    private void adjustTextSize() {
+        if (autoSizeText == AutoSizeTextMode.None || minTextSize <= 0 || maxTextSize <= 0 || getMeasuredWidth() == 0 || getMeasuredHeight() == 0)
+            return;
+        if (autoSizeStepPresets == null)
+            initAutoSize();
+        availableSpaceRect.right = getMeasuredWidth() - getCompoundPaddingLeft() - getCompoundPaddingRight();
+        availableSpaceRect.bottom = getMeasuredHeight() - getCompoundPaddingBottom() - getCompoundPaddingTop();
+        super.setTextSize(TypedValue.COMPLEX_UNIT_PX, binarySearch(availableSpaceRect));
+    }
+
+    private float binarySearch(RectF availableSpace) {
+        int lastBest = 0;
+        int lo = 0;
+        int hi = autoSizeStepPresets.length - 1;
+        int mid;
+//        for (int i = 0; i < autoSizeStepPresets.length; i++) {
+//            if (testSize(autoSizeStepPresets[i], availableSpace)) {
+//                lastBest = i;
+//            } else {
+//                break;
+//            }
+//        }
+        while (lo <= hi) {
+            mid = (lo + hi) / 2;
+            boolean fits = testSize(autoSizeStepPresets[mid], availableSpace);
+            if (fits) {
+                lastBest = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return autoSizeStepPresets[lastBest];
+
+    }
+
+    public boolean testSize(float suggestedSize, RectF availableSpace) {
+        paint.setTextSize(suggestedSize);
+        paint.setTypeface(getTypeface());
+        String text = getText().toString();
+        if (maxLines == 1) {
+            textRect.bottom = paint.getFontSpacing();
+            textRect.right = paint.measureText(text);
+            return availableSpace.width() >= textRect.right && availableSpace.height() >= textRect.bottom;
+        } else {
+            StaticLayout layout = new StaticLayout(text, paint, (int) availableSpace.right, Layout.Alignment.ALIGN_NORMAL, spacingMult, spacingAdd, true);
+            if (maxLines != -1 && layout.getLineCount() > maxLines)
+                return false;
+            return availableSpace.width() >= layout.getWidth() && availableSpace.height() >= layout.getHeight();
+        }
+    }
+
+    @Override
+    protected void onTextChanged(final CharSequence text, final int start, final int before, final int after) {
+        super.onTextChanged(text, start, before, after);
+        adjustTextSize();
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldwidth, int oldheight) {
+        super.onSizeChanged(width, height, oldwidth, oldheight);
+        if (width != oldwidth || height != oldheight)
+            adjustTextSize();
     }
 
 
@@ -1140,147 +1636,151 @@ public class EditText extends android.widget.EditText implements RippleView, Tou
     // transformations
     // -------------------------------
 
-    public float getAlpha() {
-        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    List<OnTransformationChangedListener> transformationChangedListeners = new ArrayList<>();
+
+    public void addOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.add(listener);
     }
 
-    public void setAlpha(float alpha) {
-        if (NEEDS_PROXY) {
-            wrap(this).setAlpha(alpha);
-        } else {
-            super.setAlpha(alpha);
-        }
+    public void removeOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.remove(listener);
     }
 
-    public float getPivotX() {
-        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    public void clearOnTransformationChangedListeners() {
+        transformationChangedListeners.clear();
     }
 
-    public void setPivotX(float pivotX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotX(pivotX);
-        } else {
-            super.setPivotX(pivotX);
-        }
+    private void fireOnTransformationChangedListener() {
+        if (transformationChangedListeners == null)
+            return;
+        for (OnTransformationChangedListener listener : transformationChangedListeners)
+            listener.onTransformationChanged();
     }
 
-    public float getPivotY() {
-        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
-    }
-
-    public void setPivotY(float pivotY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotY(pivotY);
-        } else {
-            super.setPivotY(pivotY);
-        }
-    }
-
-    public float getRotation() {
-        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
-    }
-
+    @Override
     public void setRotation(float rotation) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotation(rotation);
-        } else {
-            super.setRotation(rotation);
-        }
+        super.setRotation(rotation);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getRotationX() {
-        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
-    }
-
-    public void setRotationX(float rotationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationX(rotationX);
-        } else {
-            super.setRotationX(rotationX);
-        }
-    }
-
-    public float getRotationY() {
-        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
-    }
-
+    @Override
     public void setRotationY(float rotationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationY(rotationY);
-        } else {
-            super.setRotationY(rotationY);
-        }
+        super.setRotationY(rotationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleX() {
-        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    @Override
+    public void setRotationX(float rotationX) {
+        super.setRotationX(rotationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
     public void setScaleX(float scaleX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleX(scaleX);
-        } else {
-            super.setScaleX(scaleX);
-        }
+        super.setScaleX(scaleX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleY() {
-        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
-    }
-
+    @Override
     public void setScaleY(float scaleY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleY(scaleY);
-        } else {
-            super.setScaleY(scaleY);
-        }
+        super.setScaleY(scaleY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationX() {
-        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    @Override
+    public void setPivotX(float pivotX) {
+        super.setPivotX(pivotX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
+    public void setPivotY(float pivotY) {
+        super.setPivotY(pivotY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
+    public void setAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
+        super.setAlpha(alpha);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
     public void setTranslationX(float translationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationX(translationX);
-        } else {
-            super.setTranslationX(translationX);
-        }
+        super.setTranslationX(translationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationY() {
-        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
-    }
-
+    @Override
     public void setTranslationY(float translationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationY(translationY);
+        super.setTranslationY(translationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    public void setWidth(int width) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
         } else {
-            super.setTranslationY(translationY);
+            layoutParams.width = width;
+            setLayoutParams(layoutParams);
         }
     }
 
-    public float getX() {
-        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
-    }
-
-    public void setX(float x) {
-        if (NEEDS_PROXY) {
-            wrap(this).setX(x);
+    public void setHeight(int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, height));
         } else {
-            super.setX(x);
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
         }
     }
 
-    public float getY() {
-        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    public void setSize(int width, int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, height));
+        } else {
+            layoutParams.width = width;
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
+        }
     }
 
-    public void setY(float y) {
-        if (NEEDS_PROXY) {
-            wrap(this).setY(y);
-        } else {
-            super.setY(y);
+    public void setBounds(int x, int y, int width, int height) {
+        setSize(width, height);
+        setTranslationX(x);
+        setTranslationY(y);
+    }
+
+
+    // -------------------------------
+    // tooltip
+    // -------------------------------
+
+    public void setTooltipText(CharSequence text) {
+        if (text != null) {
+            setOnLongClickListener(v -> {
+                Label tooltip = (Label) LayoutInflater.from(getContext()).inflate(R.layout.carbon_tooltip, null);
+                tooltip.setText(text);
+                carbon.widget.PopupWindow window = new carbon.widget.PopupWindow(tooltip);
+                window.show(this, Gravity.LEFT | Gravity.TOP);
+                new Handler(Looper.getMainLooper()).postDelayed(window::dismiss, AnimUtils.TOOLTIP_DURATION);
+                return true;
+            });
+        } else if (isLongClickable()) {
+            setOnLongClickListener(null);
         }
     }
 }

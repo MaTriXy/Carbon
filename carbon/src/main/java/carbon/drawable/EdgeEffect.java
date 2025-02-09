@@ -1,9 +1,5 @@
 package carbon.drawable;
 
-/**
- * Created by Marcin on 2015-02-28.
- */
-
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -11,13 +7,12 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.animation.AnimationUtils;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 
-public class EdgeEffect {
-    @SuppressWarnings("UnusedDeclaration")
-    private static final String TAG = "EdgeEffect";
+public class EdgeEffect extends android.widget.EdgeEffect {
 
     private static final int RECEDE_TIME = 600;
     private static final int PULL_TIME = 167;
@@ -63,12 +58,16 @@ public class EdgeEffect {
     private float mDisplacement = 0.5f;
     private float mTargetDisplacement = 0.5f;
 
+    private RectF rect = new RectF();
+
     /**
      * Construct a new EdgeEffect with a theme appropriate for the provided context.
      *
      * @param context Context used to provide theming and resource information for the EdgeEffect
      */
     public EdgeEffect(Context context) {
+        super(context);
+
         mPaint.setAntiAlias(true);
         //final TypedArray a = context.obtainStyledAttributes(
         //      com.android.internal.R.styleable.EdgeEffect);
@@ -204,7 +203,8 @@ public class EdgeEffect {
         final float centerX = mBounds.centerX();
         final float centerY = mBounds.height() - mRadius;
 
-        canvas.scale(1.f, Math.min(mGlowScaleY, 1.f) * mBaseGlowScale, centerX, 0);
+        float s = Math.min(mGlowScaleY, 1.f) * mBaseGlowScale;
+        canvas.scale(1.f, s, centerX, 0);
 
         final float displacement = Math.max(0, Math.min(mDisplacement, 1.f)) - 0.5f;
         float translateX = mBounds.width() * displacement / 2;
@@ -212,7 +212,14 @@ public class EdgeEffect {
         canvas.clipRect(mBounds);
         canvas.translate(translateX, 0);
         mPaint.setAlpha((int) (0xff * mGlowAlpha));
-        canvas.drawCircle(centerX, centerY, mRadius, mPaint);
+
+        float y = -centerY * s;
+        float r = mRadius;
+        float r2 = (float) Math.sqrt(-y * y + y * y * s * s + r * r);
+
+        float angle = (float) ((float) Math.acos(y / r2) * 180 / Math.PI);
+        rect.set(centerX - mRadius, centerY - mRadius, centerX + mRadius, centerY + mRadius);
+        canvas.drawArc(rect, 90 - angle, angle * 2, false, mPaint);
         canvas.restoreToCount(count);
 
         boolean oneLastFrame = false;

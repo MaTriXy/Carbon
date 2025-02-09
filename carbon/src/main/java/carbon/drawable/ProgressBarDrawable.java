@@ -7,18 +7,17 @@ import android.graphics.Rect;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Interpolator;
 
-import carbon.widget.ProgressBar;
+import androidx.annotation.NonNull;
 
-/**
- * Created by Mbarin on 2015-02-08.
- */
+import carbon.widget.ProgressView;
+
 public class ProgressBarDrawable extends ProgressDrawable {
     private static final long DEFAULT_SWEEP_DURATION = 800;
     private static final long DEFAULT_SWEEP_OFFSET = 500;
     private long sweepDuration = DEFAULT_SWEEP_DURATION;
     private long sweepDelay = DEFAULT_SWEEP_OFFSET;
 
-    Interpolator interpolator = new AccelerateDecelerateInterpolator();
+    private Interpolator interpolator = new AccelerateDecelerateInterpolator();
 
     public ProgressBarDrawable() {
         forePaint.setStyle(Paint.Style.FILL);
@@ -26,16 +25,21 @@ public class ProgressBarDrawable extends ProgressDrawable {
     }
 
     @Override
-    public void draw(Canvas canvas) {
+    public int getMinimumHeight() {
+        return (int) getBarWidth();
+    }
+
+    @Override
+    public void draw(@NonNull Canvas canvas) {
         Rect bounds = getBounds();
 
-        if (style == ProgressBar.Style.BarIndeterminate) {
+        if (style == ProgressView.Style.BarIndeterminate) {
             long time = (System.currentTimeMillis() - startTime) % (sweepDuration + sweepDelay);
             float t = (float) (time) / (sweepDuration);
             float t2 = Math.max(0, (float) (time - sweepDelay) / sweepDuration);
             float end = interpolator.getInterpolation(t2);
             canvas.drawRect(end * bounds.width(), getBarPadding(), t * bounds.width(), bounds.height(), forePaint);
-        } else if (style == ProgressBar.Style.BarQuery) {
+        } else if (style == ProgressView.Style.BarQuery) {
             long time = (System.currentTimeMillis() - startTime) % (sweepDuration + sweepDelay);
             float t = 1 - (float) (time) / (sweepDuration);
             float t2 = Math.max(0, (float) (time - sweepDelay) / sweepDuration);

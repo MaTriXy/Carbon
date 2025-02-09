@@ -4,10 +4,32 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    android:orientation="vertical"
-    app:carbon_insetColor="?attr/colorPrimary">
+    android:orientation="vertical">
 
-    <include layout="@layout/view_debugtoolbar" />
+    <carbon.widget.Toolbar
+        android:id="@+id/toolbar"
+        style="@style/carbon_Toolbar.ActionBar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/carbon_toolbarHeightDouble"
+        app:carbon_menu="@menu/menu_samples">
+
+        <carbon.widget.FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <carbon.widget.EditText
+                style="@style/carbon_EditText"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/carbon_toolbarHeight"
+                android:layout_gravity="bottom"
+                android:gravity="center_vertical"
+                android:hint="Amount"
+                android:inputType="numberDecimal"
+                android:tag="enable"
+                android:text="20"
+                app:carbon_prefix="$" />
+        </carbon.widget.FrameLayout>
+    </carbon.widget.Toolbar>
 
     <carbon.widget.ScrollView
         android:layout_width="match_parent"
@@ -18,73 +40,85 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
-            <carbon.widget.EditText
-                android:id="@+id/editText"
+            <carbon.widget.InputLayout
+                style="@style/carbon_InputLayout.Box"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/carbon_padding"
-                android:gravity="bottom|left"
-                android:hint="email"
-                android:singleLine="true"
-                android:tag="enable"
-                android:text="hello text"
-                app:carbon_floatingLabel="true"
-                app:carbon_pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$"
-                app:carbon_required="true" />
+                app:carbon_actionButton="voiceInput"
+                app:carbon_label="Weight"
+                app:carbon_labelMode="floating"
+                app:carbon_minCharacters="3">
 
-            <carbon.widget.EditText
-                android:id="@+id/editText3"
+                <carbon.widget.EditText
+                    android:id="@+id/editText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:tag="enable"
+                    android:text="75"
+                    app:carbon_required="true"
+                    app:carbon_suffix="kg" />
+            </carbon.widget.InputLayout>
+
+            <carbon.widget.InputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/carbon_padding"
-                android:gravity="bottom|left"
-                android:hint="your email"
-                android:tag="enable"
-                android:text="hello text"
-                app:carbon_clearButton="true"
-                app:carbon_errorMessage="it's not an email"
+                android:gravity="center_horizontal"
+                app:carbon_actionButton="clear"
+                app:carbon_error="it's not an email"
+                app:carbon_errorMode="whenInvalid"
                 app:carbon_label="email"
-                app:carbon_labelStyle="persistent"
-                app:carbon_minCharacters="3"
-                app:carbon_pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$" />
+                app:carbon_labelMode="persistent">
 
-            <carbon.widget.EditText
+                <carbon.widget.EditText
+                    android:id="@+id/editText3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="your email"
+                    android:maxLines="1"
+                    android:paddingTop="@dimen/carbon_paddingHalf"
+                    android:tag="enable"
+                    android:text="email@gmail.com"
+                    app:carbon_minCharacters="3"
+                    app:carbon_pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$" />
+            </carbon.widget.InputLayout>
+
+            <carbon.widget.InputLayout
+                style="@style/carbon_InputLayout.Stroke"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/carbon_padding"
-                android:gravity="bottom|left"
-                android:tag="enable"
-                app:carbon_floatingLabel="true"
-                app:carbon_label="Label"
-                app:carbon_labelStyle="persistent"
-                app:carbon_minCharacters="3"
-                app:carbon_showPasswordButton="true" />
+                app:carbon_actionButton="showPassword"
+                app:carbon_label="password"
+                app:carbon_labelMode="floating">
 
-            <carbon.widget.EditText
+                <carbon.widget.EditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@null"
+                    android:inputType="numberPassword"
+                    android:tag="enable"
+                    app:carbon_maxCharacters="10"
+                    app:carbon_minCharacters="3" />
+            </carbon.widget.InputLayout>
+
+            <carbon.widget.InputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="@dimen/carbon_padding"
-                android:gravity="bottom|left"
-                android:tag="enable"
-                app:carbon_maxCharacters="10" />
+                android:layout_margin="@dimen/carbon_margin"
+                app:carbon_actionButton="clear"
+                app:carbon_label="multiline"
+                app:carbon_labelMode="ifNotEmpty">
 
-            <carbon.widget.EditText
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_margin="@dimen/carbon_padding"
-                android:gravity="bottom|left"
-                android:tag="enable"
-                app:carbon_maxCharacters="10"
-                app:carbon_minCharacters="3" />
-
-            <EditText
-                android:id="@+id/editText2"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_margin="@dimen/carbon_padding"
-                android:tag="enable"
-                android:text="hello text" />
-
+                <carbon.widget.EditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/carbon_padding"
+                    android:maxLines="@null"
+                    android:text="multi\nline" />
+            </carbon.widget.InputLayout>
         </carbon.widget.LinearLayout>
     </carbon.widget.ScrollView>
 </carbon.widget.LinearLayout>

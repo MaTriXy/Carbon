@@ -1,7 +1,6 @@
 package carbon.widget;
 
 import android.content.Context;
-import android.support.v7.widget.LinearLayoutManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -9,16 +8,18 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.AttrRes;
+import androidx.recyclerview.widget.LinearLayoutManager;
+
 import java.text.Format;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import carbon.Carbon;
 import carbon.R;
+import carbon.recycler.ListAdapter;
 
-/**
- * Created by Marcin on 2015-12-18.
- */
 public class TableView extends RecyclerView {
     Map<Class, CellRenderer> cellRenderers = new HashMap<>();
 
@@ -32,20 +33,20 @@ public class TableView extends RecyclerView {
         initTableView(context);
     }
 
-    public TableView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public TableView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         initTableView(context);
     }
 
     private void initTableView(Context context) {
-        setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
+        setLayoutManager(new LinearLayoutManager(context));
         putCellRenderer(String.class, new StringRenderer());
         putCellRenderer(Integer.class, new IntegerRenderer());
         putCellRenderer(Float.class, new FloatRenderer());
         putCellRenderer(Boolean.class, new BooleanRenderer());
     }
 
-    public static abstract class Adapter extends RecyclerView.ListAdapter<Adapter.ViewHolder, List<?>> {
+    public static abstract class Adapter extends ListAdapter<Adapter.ViewHolder, List<?>> {
         private TableView tableView;
 
         public Adapter(TableView tableView) {
@@ -122,7 +123,7 @@ public class TableView extends RecyclerView {
             TextView textView = new TextView(context);
             textView.setPadding((int) context.getResources().getDimension(R.dimen.carbon_padding), 0, (int) context.getResources().getDimension(R.dimen.carbon_padding), 0);
             textView.setGravity(Gravity.CENTER_VERTICAL);
-            textView.setTextColor(context.getResources().getColor(R.color.carbon_black_87));
+            textView.setTextColor(Carbon.getThemeColor(context, android.R.attr.textColorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             textView.setMaxLines(1);
             textView.setEllipsize(TextUtils.TruncateAt.END);
@@ -141,8 +142,8 @@ public class TableView extends RecyclerView {
         public TextView getView(Context context) {
             TextView textView = new TextView(context);
             textView.setPadding((int) context.getResources().getDimension(R.dimen.carbon_padding), 0, (int) context.getResources().getDimension(R.dimen.carbon_padding), 0);
-            textView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
-            textView.setTextColor(context.getResources().getColor(R.color.carbon_black_87));
+            textView.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            textView.setTextColor(Carbon.getThemeColor(context, android.R.attr.textColorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             textView.setMaxLines(1);
             textView.setEllipsize(TextUtils.TruncateAt.END);
@@ -165,8 +166,8 @@ public class TableView extends RecyclerView {
         public TextView getView(Context context) {
             TextView textView = new TextView(context);
             textView.setPadding((int) context.getResources().getDimension(R.dimen.carbon_padding), 0, (int) context.getResources().getDimension(R.dimen.carbon_padding), 0);
-            textView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
-            textView.setTextColor(context.getResources().getColor(R.color.carbon_black_87));
+            textView.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            textView.setTextColor(Carbon.getThemeColor(context, android.R.attr.textColorPrimary));
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             textView.setMaxLines(1);
             textView.setEllipsize(TextUtils.TruncateAt.END);
@@ -178,7 +179,7 @@ public class TableView extends RecyclerView {
             if (format != null) {
                 view.setText(format.format(value));
             } else {
-                view.setText(value.toString());
+                view.setText(String.valueOf(value));
             }
         }
     }
@@ -199,7 +200,7 @@ public class TableView extends RecyclerView {
 
         @Override
         public void bindView(FrameLayout view, Boolean value, Format format) {
-            ((CheckBox) view.getChildAt(0)).setCheckedImmediate(value);
+            ((CheckBox) view.getChildAt(0)).setChecked(value);
         }
     }
 }

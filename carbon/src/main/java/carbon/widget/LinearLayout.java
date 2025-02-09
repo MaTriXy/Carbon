@@ -1,33 +1,47 @@
 package carbon.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Point;
 import android.graphics.PointF;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v4.view.GravityCompat;
-import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
-import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewAnimationUtils;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.AnimatorListenerAdapter;
-import com.nineoldandroids.animation.ValueAnimator;
-import com.nineoldandroids.view.ViewHelper;
+import androidx.annotation.AttrRes;
+import androidx.annotation.FloatRange;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StyleRes;
+
+import com.annimon.stream.Stream;
+import com.google.android.material.shape.CutCornerTreatment;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.RoundedCornerTreatment;
+import com.google.android.material.shape.ShapeAppearanceModel;
+
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,89 +49,266 @@ import java.util.List;
 
 import carbon.Carbon;
 import carbon.R;
-import carbon.animation.AnimUtils;
 import carbon.animation.AnimatedView;
 import carbon.animation.StateAnimator;
-import carbon.drawable.EmptyDrawable;
+import carbon.behavior.Behavior;
+import carbon.component.Component;
+import carbon.component.ComponentView;
 import carbon.drawable.ripple.RippleDrawable;
 import carbon.drawable.ripple.RippleView;
 import carbon.internal.ElevationComparator;
-import carbon.internal.MatrixHelper;
-import carbon.internal.PercentLayoutHelper;
-import carbon.shadow.Shadow;
-import carbon.shadow.ShadowGenerator;
-import carbon.shadow.ShadowShape;
-import carbon.shadow.ShadowView;
-
-import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
-import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
+import carbon.internal.RevealAnimator;
+import carbon.view.BehaviorView;
+import carbon.view.InsetView;
+import carbon.view.MarginView;
+import carbon.view.MaxSizeView;
+import carbon.view.RevealView;
+import carbon.view.ShadowView;
+import carbon.view.ShapeModelView;
+import carbon.view.StateAnimatorView;
+import carbon.view.StrokeView;
+import carbon.view.TouchMarginView;
+import carbon.view.TransformationView;
+import carbon.view.VisibleView;
 
 /**
- * Created by Marcin on 2014-11-20.
- * <p/>
- * A LinearLayout implementation with support for material features including shadows, ripples, rounded
- * corners, insets, custom drawing order, touch margins, state animators and others.
+ * A LinearLayout implementation with support for material features including shadows, ripples,
+ * rounded corners, insets, custom drawing order, touch margins, state animators and others.
  */
-public class LinearLayout extends android.widget.LinearLayout implements ShadowView, RippleView, TouchMarginView, StateAnimatorView, AnimatedView, InsetView, CornerView, MaxSizeView {
-    private final PercentLayoutHelper percentLayoutHelper = new PercentLayoutHelper(this);
+public class LinearLayout extends android.widget.LinearLayout
+        implements
+        ShadowView,
+        RippleView,
+        TouchMarginView,
+        StateAnimatorView,
+        AnimatedView,
+        ShapeModelView,
+        InsetView,
+        StrokeView,
+        MaxSizeView,
+        RevealView,
+        VisibleView,
+        TransformationView,
+        BehaviorView,
+        MarginView {
+
     private OnTouchListener onDispatchTouchListener;
 
     public LinearLayout(Context context) {
-        super(context, null);
-        initLinearLayout(null, R.attr.carbon_linearLayoutStyle);
+        super(context, null, R.attr.carbon_linearLayoutStyle);
+        initLinearLayout(null, R.attr.carbon_linearLayoutStyle, R.style.carbon_LinearLayout);
     }
 
     public LinearLayout(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        initLinearLayout(attrs, R.attr.carbon_linearLayoutStyle);
+        super(context, attrs, R.attr.carbon_linearLayoutStyle);
+        initLinearLayout(attrs, R.attr.carbon_linearLayoutStyle, R.style.carbon_LinearLayout);
     }
 
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public LinearLayout(Context context, AttributeSet attrs, int defStyleAttr) {
+    public LinearLayout(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initLinearLayout(attrs, defStyleAttr);
+        initLinearLayout(attrs, defStyleAttr, R.style.carbon_LinearLayout);
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public LinearLayout(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public LinearLayout(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        initLinearLayout(attrs, defStyleAttr);
+        initLinearLayout(attrs, defStyleAttr, defStyleRes);
     }
 
-    private void initLinearLayout(AttributeSet attrs, int defStyleAttr) {
-        if (attrs != null) {
-            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.LinearLayout, defStyleAttr, 0);
-            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
+    private static int[] rippleIds = new int[]{
+            R.styleable.LinearLayout_carbon_rippleColor,
+            R.styleable.LinearLayout_carbon_rippleStyle,
+            R.styleable.LinearLayout_carbon_rippleHotspot,
+            R.styleable.LinearLayout_carbon_rippleRadius
+    };
+    private static int[] animationIds = new int[]{
+            R.styleable.LinearLayout_carbon_inAnimation,
+            R.styleable.LinearLayout_carbon_outAnimation
+    };
+    private static int[] touchMarginIds = new int[]{
+            R.styleable.LinearLayout_carbon_touchMargin,
+            R.styleable.LinearLayout_carbon_touchMarginLeft,
+            R.styleable.LinearLayout_carbon_touchMarginTop,
+            R.styleable.LinearLayout_carbon_touchMarginRight,
+            R.styleable.LinearLayout_carbon_touchMarginBottom
+    };
+    private static int[] insetIds = new int[]{
+            R.styleable.LinearLayout_carbon_inset,
+            R.styleable.LinearLayout_carbon_insetLeft,
+            R.styleable.LinearLayout_carbon_insetTop,
+            R.styleable.LinearLayout_carbon_insetRight,
+            R.styleable.LinearLayout_carbon_insetBottom,
+            R.styleable.LinearLayout_carbon_insetColor
+    };
+    private static int[] strokeIds = new int[]{
+            R.styleable.LinearLayout_carbon_stroke,
+            R.styleable.LinearLayout_carbon_strokeWidth
+    };
+    private static int[] cornerCutRadiusIds = new int[]{
+            R.styleable.LinearLayout_carbon_cornerRadiusTopStart,
+            R.styleable.LinearLayout_carbon_cornerRadiusTopEnd,
+            R.styleable.LinearLayout_carbon_cornerRadiusBottomStart,
+            R.styleable.LinearLayout_carbon_cornerRadiusBottomEnd,
+            R.styleable.LinearLayout_carbon_cornerRadius,
+            R.styleable.LinearLayout_carbon_cornerCutTopStart,
+            R.styleable.LinearLayout_carbon_cornerCutTopEnd,
+            R.styleable.LinearLayout_carbon_cornerCutBottomStart,
+            R.styleable.LinearLayout_carbon_cornerCutBottomEnd,
+            R.styleable.LinearLayout_carbon_cornerCut
+    };
+    private static int[] maxSizeIds = new int[]{
+            R.styleable.LinearLayout_carbon_maxWidth,
+            R.styleable.LinearLayout_carbon_maxHeight,
+    };
+    private static int[] elevationIds = new int[]{
+            R.styleable.LinearLayout_carbon_elevation,
+            R.styleable.LinearLayout_carbon_elevationShadowColor,
+            R.styleable.LinearLayout_carbon_elevationAmbientShadowColor,
+            R.styleable.LinearLayout_carbon_elevationSpotShadowColor
+    };
 
-            Carbon.initElevation(this, attrs, defStyleAttr);
-            Carbon.initAnimations(this, attrs, defStyleAttr);
-            Carbon.initTouchMargin(this, attrs, defStyleAttr);
-            Carbon.initInset(this, attrs, defStyleAttr);
-            Carbon.initMaxSize(this, attrs, defStyleAttr);
-            setCornerRadius((int) a.getDimension(R.styleable.LinearLayout_carbon_cornerRadius, 0));
+    private void initLinearLayout(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.LinearLayout, defStyleAttr, defStyleRes);
 
-            a.recycle();
-        }
+        Carbon.initDefaultBackground(this, a, R.styleable.LinearLayout_android_background);
+        Carbon.initElevation(this, a, elevationIds);
+        Carbon.initRippleDrawable(this, a, rippleIds);
+        Carbon.initAnimations(this, a, animationIds);
+        Carbon.initTouchMargin(this, a, touchMarginIds);
+        Carbon.initInset(this, a, insetIds);
+        Carbon.initMaxSize(this, a, maxSizeIds);
+        Carbon.initStroke(this, a, strokeIds);
+        Carbon.initCornerCutRadius(this, a, cornerCutRadiusIds);
+
+        a.recycle();
 
         setChildrenDrawingOrderEnabled(true);
         setClipToPadding(false);
-
-        if (getBackground() == null)
-            super.setBackgroundDrawable(emptyBackground);
     }
 
-
-    List<View> views;
     private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private boolean drawCalled = false;
+    RevealAnimator revealAnimator;
+
+    public Point getLocationOnScreen() {
+        int[] outLocation = new int[2];
+        super.getLocationOnScreen(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    public Point getLocationInWindow() {
+        int[] outLocation = new int[2];
+        super.getLocationInWindow(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    @NotNull
+    public Animator createCircularReveal(android.view.View hotspot, float startRadius, float finishRadius) {
+        int[] location = new int[2];
+        hotspot.getLocationOnScreen(location);
+        int[] myLocation = new int[2];
+        getLocationOnScreen(myLocation);
+        return createCircularReveal(location[0] - myLocation[0] + hotspot.getWidth() / 2, location[1] - myLocation[1] + hotspot.getHeight() / 2, startRadius, finishRadius);
+    }
+
+    @NotNull
+    @Override
+    public Animator createCircularReveal(int x, int y, float startRadius, float finishRadius) {
+        startRadius = Carbon.getRevealRadius(this, x, y, startRadius);
+        finishRadius = Carbon.getRevealRadius(this, x, y, finishRadius);
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            Animator circularReveal = ViewAnimationUtils.createCircularReveal(this, x, y, startRadius, finishRadius);
+            circularReveal.setDuration(Carbon.getDefaultRevealDuration());
+            return circularReveal;
+        } else {
+            revealAnimator = new RevealAnimator(x, y, startRadius, finishRadius);
+            revealAnimator.setDuration(Carbon.getDefaultRevealDuration());
+            revealAnimator.addUpdateListener(animation -> {
+                RevealAnimator reveal = ((RevealAnimator) animation);
+                reveal.radius = (float) reveal.getAnimatedValue();
+                reveal.mask.reset();
+                reveal.mask.addCircle(reveal.x, reveal.y, Math.max((Float) reveal.getAnimatedValue(), 1), Path.Direction.CW);
+                postInvalidate();
+            });
+            revealAnimator.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    revealAnimator = null;
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    revealAnimator = null;
+                }
+            });
+            return revealAnimator;
+        }
+    }
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        views = new ArrayList<>();
-        for (int i = 0; i < getChildCount(); i++)
-            views.add(getChildAt(i));
-        Collections.sort(views, new ElevationComparator());
+        boolean r = revealAnimator != null && revealAnimator.isRunning();
+        boolean c = !Carbon.isShapeRect(shapeModel, boundsRect);
+
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            if (spotShadowColor != null)
+                super.setOutlineSpotShadowColor(spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()));
+            if (ambientShadowColor != null)
+                super.setOutlineAmbientShadowColor(ambientShadowColor.getColorForState(getDrawableState(), ambientShadowColor.getDefaultColor()));
+        }
+
+        // draw not called, we have to handle corners here
+        if (isInEditMode() && !drawCalled && (r || c) && getWidth() > 0 && getHeight() > 0) {
+            Bitmap layer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas layerCanvas = new Canvas(layer);
+            dispatchDrawInternal(layerCanvas);
+
+            Bitmap mask = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas maskCanvas = new Canvas(mask);
+            Paint maskPaint = new Paint(0xffffffff);
+            maskCanvas.drawPath(cornersMask, maskPaint);
+
+            for (int x = 0; x < getWidth(); x++) {
+                for (int y = 0; y < getHeight(); y++) {
+                    int maskPixel = mask.getPixel(x, y);
+                    layer.setPixel(x, y, Color.alpha(maskPixel) > 0 ? layer.getPixel(x, y) : 0);
+                }
+            }
+            canvas.drawBitmap(layer, 0, 0, paint);
+        } else if (!drawCalled && (r || c) && getWidth() > 0 && getHeight() > 0 && !Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            if (r) {
+                int saveCount2 = canvas.save();
+                canvas.clipRect(revealAnimator.x - revealAnimator.radius, revealAnimator.y - revealAnimator.radius, revealAnimator.x + revealAnimator.radius, revealAnimator.y + revealAnimator.radius);
+                dispatchDrawInternal(canvas);
+                canvas.restoreToCount(saveCount2);
+            } else {
+                dispatchDrawInternal(canvas);
+            }
+
+            paint.setXfermode(Carbon.CLEAR_MODE);
+            if (c) {
+                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
+                canvas.drawPath(cornersMask, paint);
+            }
+            if (r)
+                canvas.drawPath(revealAnimator.mask, paint);
+            paint.setXfermode(null);
+
+            canvas.restoreToCount(saveCount);
+        } else {
+            dispatchDrawInternal(canvas);
+        }
+        drawCalled = false;
+    }
+
+    private void dispatchDrawInternal(@NonNull Canvas canvas) {
+        Collections.sort(getViews(), new ElevationComparator());
 
         super.dispatchDraw(canvas);
+        if (stroke != null)
+            drawStroke(canvas);
         if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
             rippleDrawable.draw(canvas);
         if (insetColor != 0) {
@@ -136,36 +327,19 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
-        if (!child.isShown())
-            return super.drawChild(canvas, child, drawingTime);
-
-        if (!isInEditMode() && child instanceof ShadowView && Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
+        // TODO: why isShown() returns false after being reattached?
+        if (child instanceof ShadowView && (!Carbon.IS_LOLLIPOP_OR_HIGHER || ((ShadowView) child).getElevationShadowColor() != null && !Carbon.IS_PIE_OR_HIGHER)) {
             ShadowView shadowView = (ShadowView) child;
-            Shadow shadow = shadowView.getShadow();
-            if (shadow != null) {
-                paint.setAlpha((int) (ShadowGenerator.ALPHA * ViewHelper.getAlpha(child)));
-
-                float childElevation = shadowView.getElevation() + shadowView.getTranslationZ();
-
-                int saveCount = canvas.save(Canvas.MATRIX_SAVE_FLAG);
-                canvas.translate(0, childElevation / 2);
-                canvas.translate(child.getLeft(), child.getTop());
-
-                Matrix matrix = MatrixHelper.getMatrix(child);
-                canvas.concat(matrix);
-                shadow.draw(canvas, child, paint);
-                canvas.restoreToCount(saveCount);
-            }
+            shadowView.drawShadow(canvas);
         }
 
         if (child instanceof RippleView) {
             RippleView rippleView = (RippleView) child;
             RippleDrawable rippleDrawable = rippleView.getRippleDrawable();
             if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless) {
-                int saveCount = canvas.save(Canvas.MATRIX_SAVE_FLAG);
-                canvas.translate(
-                        child.getLeft(),
-                        child.getTop());
+                int saveCount = canvas.save();
+                canvas.translate(child.getLeft(), child.getTop());
+                canvas.concat(child.getMatrix());
                 rippleDrawable.draw(canvas);
                 canvas.restoreToCount(saveCount);
             }
@@ -176,7 +350,9 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
     @Override
     protected int getChildDrawingOrder(int childCount, int child) {
-        return views != null ? indexOfChild(views.get(child)) : child;
+        if (views.size() != childCount)
+            getViews();
+        return indexOfChild(views.get(child));
     }
 
     protected boolean isTransformedTouchPointInView(float x, float y, View child, PointF outLocalPoint) {
@@ -190,71 +366,144 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // corners
     // -------------------------------
 
-    private int cornerRadius;
-    private Path cornersMask;
-    private static PorterDuffXfermode pdMode = new PorterDuffXfermode(PorterDuff.Mode.CLEAR);
+    private RectF boundsRect = new RectF();
+    private Path cornersMask = new Path();
 
-    public int getCornerRadius() {
-        return cornerRadius;
+    @NotNull
+    public ShapeAppearanceModel getShapeModel() {
+        return shapeModel;
     }
 
-    public void setCornerRadius(int cornerRadius) {
-        this.cornerRadius = cornerRadius;
-        invalidateShadow();
-        initCorners();
+
+    /**
+     * Sets the corner radius. If corner radius is equal to 0, rounded corners are turned off.
+     *
+     * @param cornerRadius
+     */
+    @Override
+    public void setCornerRadius(float cornerRadius) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new RoundedCornerTreatment(cornerRadius)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setCornerCut(float cornerCut) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new CutCornerTreatment(cornerCut)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setShapeModel(@NotNull ShapeAppearanceModel model) {
+        this.shapeModel = model;
+        shadowDrawable = new MaterialShapeDrawable(shapeModel);
+        if (getWidth() > 0 && getHeight() > 0)
+            updateCorners();
+        if (!Carbon.IS_LOLLIPOP_OR_HIGHER)
+            postInvalidate();
     }
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        layoutAnchoredViews();
 
         if (!changed)
             return;
 
-        invalidateShadow();
-
         if (getWidth() == 0 || getHeight() == 0)
             return;
 
-        initCorners();
+        updateCorners();
 
         if (rippleDrawable != null)
             rippleDrawable.setBounds(0, 0, getWidth(), getHeight());
-
-        percentLayoutHelper.restoreOriginalParams();
     }
 
-    private void initCorners() {
-        if (cornerRadius > 0) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+    private void updateCorners() {
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (!Carbon.isShapeRect(shapeModel, boundsRect))
                 setClipToOutline(true);
-                setOutlineProvider(ShadowShape.viewOutlineProvider);
-            } else {
-                cornersMask = new Path();
-                cornersMask.addRoundRect(new RectF(0, 0, getWidth(), getHeight()), cornerRadius, cornerRadius, Path.Direction.CW);
-                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
-                setOutlineProvider(ViewOutlineProvider.BOUNDS);
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    if (Carbon.isShapeRect(shapeModel, boundsRect)) {
+                        outline.setRect(0, 0, getWidth(), getHeight());
+                    } else {
+                        shadowDrawable.setBounds(0, 0, getWidth(), getHeight());
+                        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_NEVER);
+                        shadowDrawable.getOutline(outline);
+                    }
+                }
+            });
         }
+
+        boundsRect.set(shadowDrawable.getBounds());
+        shadowDrawable.getPathForSize(getWidth(), getHeight(), cornersMask);
     }
 
+    public void drawInternal(@NonNull Canvas canvas) {
+        super.draw(canvas);
+        if (stroke != null)
+            drawStroke(canvas);
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+            rippleDrawable.draw(canvas);
+    }
+
+    @SuppressLint("MissingSuperCall")
     @Override
     public void draw(@NonNull Canvas canvas) {
-        if (cornerRadius > 0 && getWidth() > 0 && getHeight() > 0 && Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
+        drawCalled = true;
+        boolean r = revealAnimator != null;
+        boolean c = !Carbon.isShapeRect(shapeModel, boundsRect);
+
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            if (spotShadowColor != null)
+                super.setOutlineSpotShadowColor(spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()));
+            if (ambientShadowColor != null)
+                super.setOutlineAmbientShadowColor(ambientShadowColor.getColorForState(getDrawableState(), ambientShadowColor.getDefaultColor()));
+        }
+
+        if (isInEditMode() && (r || c) && getWidth() > 0 && getHeight() > 0) {
+            Bitmap layer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas layerCanvas = new Canvas(layer);
+            drawInternal(layerCanvas);
+
+            Bitmap mask = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas maskCanvas = new Canvas(mask);
+            Paint maskPaint = new Paint(0xffffffff);
+            maskCanvas.drawPath(cornersMask, maskPaint);
+
+            for (int x = 0; x < getWidth(); x++) {
+                for (int y = 0; y < getHeight(); y++) {
+                    int maskPixel = mask.getPixel(x, y);
+                    layer.setPixel(x, y, Color.alpha(maskPixel) > 0 ? layer.getPixel(x, y) : 0);
+                }
+            }
+            canvas.drawBitmap(layer, 0, 0, paint);
+        } else if (getWidth() > 0 && getHeight() > 0 && (((r || c) && !Carbon.IS_LOLLIPOP_OR_HIGHER) || !shapeModel.isRoundRect(boundsRect))) {
             int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
 
-            super.draw(canvas);
+            if (r) {
+                int saveCount2 = canvas.save();
+                canvas.clipRect(revealAnimator.x - revealAnimator.radius, revealAnimator.y - revealAnimator.radius, revealAnimator.x + revealAnimator.radius, revealAnimator.y + revealAnimator.radius);
+                drawInternal(canvas);
+                canvas.restoreToCount(saveCount2);
+            } else {
+                drawInternal(canvas);
+            }
 
-            paint.setXfermode(pdMode);
-            canvas.drawPath(cornersMask, paint);
+            paint.setXfermode(Carbon.CLEAR_MODE);
+            if (c) {
+                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
+                canvas.drawPath(cornersMask, paint);
+            }
+            if (r)
+                canvas.drawPath(revealAnimator.mask, paint);
+            paint.setXfermode(null);
 
             canvas.restoreToCount(saveCount);
             paint.setXfermode(null);
         } else {
-            super.draw(canvas);
+            drawInternal(canvas);
         }
     }
 
@@ -264,15 +513,11 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // -------------------------------
 
     private RippleDrawable rippleDrawable;
-    private EmptyDrawable emptyBackground = new EmptyDrawable();
 
     @Override
     public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
-        views = new ArrayList<>();
-        for (int i = 0; i < getChildCount(); i++)
-            views.add(getChildAt(i));
-        Collections.sort(views, new ElevationComparator());
-
+        if (shadowDrawable.isPointInTransparentRegion((int) event.getX(), (int) event.getY()))
+            return false;
         if (onDispatchTouchListener != null && onDispatchTouchListener.onTouch(this, event))
             return true;
 
@@ -286,16 +531,19 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
         return rippleDrawable;
     }
 
+    @Override
     public void setRippleDrawable(RippleDrawable newRipple) {
         if (rippleDrawable != null) {
             rippleDrawable.setCallback(null);
             if (rippleDrawable.getStyle() == RippleDrawable.Style.Background)
-                super.setBackgroundDrawable(rippleDrawable.getBackground() == null ? emptyBackground : rippleDrawable.getBackground());
+                super.setBackgroundDrawable(rippleDrawable.getBackground());
         }
 
         if (newRipple != null) {
             newRipple.setCallback(this);
             newRipple.setBounds(0, 0, getWidth(), getHeight());
+            newRipple.setState(getDrawableState());
+            ((Drawable) newRipple).setVisible(getVisibility() == VISIBLE, false);
             if (newRipple.getStyle() == RippleDrawable.Style.Background)
                 super.setBackgroundDrawable((Drawable) newRipple);
         }
@@ -304,112 +552,66 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     }
 
     @Override
-    protected boolean verifyDrawable(Drawable who) {
+    protected boolean verifyDrawable(@NonNull Drawable who) {
         return super.verifyDrawable(who) || rippleDrawable == who;
     }
 
     @Override
     public void invalidateDrawable(@NonNull Drawable drawable) {
         super.invalidateDrawable(drawable);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate();
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).invalidate();
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate(@NonNull Rect dirty) {
         super.invalidate(dirty);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(dirty);
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).invalidate(dirty);
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate(int l, int t, int r, int b) {
         super.invalidate(l, t, r, b);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(l, t, r, b);
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).invalidate(l, t, r, b);
+        invalidateParentIfNeeded();
     }
 
     @Override
     public void invalidate() {
         super.invalidate();
+        invalidateParentIfNeeded();
+    }
+
+    private void invalidateParentIfNeeded() {
         if (getParent() == null || !(getParent() instanceof View))
             return;
 
         if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
             ((View) getParent()).invalidate();
 
-        if (getElevation() > 0 || getCornerRadius() > 0)
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
             ((View) getParent()).invalidate();
     }
 
     @Override
     public void postInvalidateDelayed(long delayMilliseconds) {
         super.postInvalidateDelayed(delayMilliseconds);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
     }
 
     @Override
     public void postInvalidateDelayed(long delayMilliseconds, int left, int top, int right, int bottom) {
         super.postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
     }
 
-    @Override
-    public void postInvalidate() {
-        super.postInvalidate();
+    private void postInvalidateParentIfNeededDelayed(long delayMilliseconds) {
         if (getParent() == null || !(getParent() instanceof View))
             return;
 
         if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate();
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
 
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).postInvalidate();
-    }
-
-    @Override
-    public void postInvalidate(int left, int top, int right, int bottom) {
-        super.postInvalidate(left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate(left, top, right, bottom);
-
-        if (getElevation() > 0 || getCornerRadius() > 0)
-            ((View) getParent()).postInvalidate(left, top, right, bottom);
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
     }
 
     @Override
@@ -428,7 +630,7 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
             rippleDrawable.setCallback(null);
             rippleDrawable = null;
         }
-        super.setBackgroundDrawable(background == null ? emptyBackground : background);
+        super.setBackgroundDrawable(background);
     }
 
 
@@ -438,21 +640,32 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
     private float elevation = 0;
     private float translationZ = 0;
-    private Shadow shadow;
+    private ShapeAppearanceModel shapeModel = new ShapeAppearanceModel();
+    private MaterialShapeDrawable shadowDrawable = new MaterialShapeDrawable(shapeModel);
+    private ColorStateList ambientShadowColor, spotShadowColor;
 
     @Override
     public float getElevation() {
         return elevation;
     }
 
-    public synchronized void setElevation(float elevation) {
-        if (elevation == this.elevation)
-            return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+    @Override
+    public void setElevation(float elevation) {
+        if (Carbon.IS_PIE_OR_HIGHER) {
             super.setElevation(elevation);
-        this.elevation = elevation;
-        if (getParent() != null && getParent() instanceof View)
+            super.setTranslationZ(translationZ);
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setElevation(elevation);
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setElevation(0);
+                super.setTranslationZ(0);
+            }
+        } else if (elevation != this.elevation && getParent() != null) {
             ((View) getParent()).postInvalidate();
+        }
+        this.elevation = elevation;
     }
 
     @Override
@@ -460,23 +673,21 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
         return translationZ;
     }
 
-    public synchronized void setTranslationZ(float translationZ) {
+    public void setTranslationZ(float translationZ) {
         if (translationZ == this.translationZ)
             return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+        if (Carbon.IS_PIE_OR_HIGHER) {
             super.setTranslationZ(translationZ);
-        this.translationZ = translationZ;
-        if (getParent() != null && getParent() instanceof View)
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setTranslationZ(0);
+            }
+        } else if (translationZ != this.translationZ && getParent() != null) {
             ((View) getParent()).postInvalidate();
-    }
-
-    @Override
-    public ShadowShape getShadowShape() {
-        if (cornerRadius == getWidth() / 2 && getWidth() == getHeight())
-            return ShadowShape.CIRCLE;
-        if (cornerRadius > 0)
-            return ShadowShape.ROUND_RECT;
-        return ShadowShape.RECT;
+        }
+        this.translationZ = translationZ;
     }
 
     @Override
@@ -485,21 +696,117 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     }
 
     @Override
-    public Shadow getShadow() {
-        float elevation = getElevation() + getTranslationZ();
-        if (elevation >= 0.01f && getWidth() > 0 && getHeight() > 0) {
-            if (shadow == null || shadow.elevation != elevation)
-                shadow = ShadowGenerator.generateShadow(this, elevation);
-            return shadow;
-        }
-        return null;
+    public boolean hasShadow() {
+        return getElevation() + getTranslationZ() >= 0.01f && getWidth() > 0 && getHeight() > 0;
     }
 
     @Override
-    public void invalidateShadow() {
-        shadow = null;
-        if (getParent() != null && getParent() instanceof View)
-            ((View) getParent()).postInvalidate();
+    public void drawShadow(@NotNull Canvas canvas) {
+        float alpha = getAlpha() * Carbon.getBackgroundTintAlpha(this) / 255.0f;
+        if (alpha == 0 || !hasShadow())
+            return;
+
+        float z = getElevation() + getTranslationZ();
+
+        int saveCount;
+        boolean maskShadow = getBackground() != null && alpha != 1;
+        boolean r = revealAnimator != null && revealAnimator.isRunning();
+
+        if (alpha != 1.0f) {
+            paint.setAlpha((int) (255 * alpha));
+            saveCount = canvas.saveLayer(-z, -z, canvas.getWidth() + z, canvas.getHeight() + z, paint, Canvas.ALL_SAVE_FLAG);
+        } else {
+            saveCount = canvas.save();
+        }
+
+        if (r) {
+            canvas.clipRect(
+                    getLeft() + revealAnimator.x - revealAnimator.radius, getTop() + revealAnimator.y - revealAnimator.radius,
+                    getLeft() + revealAnimator.x + revealAnimator.radius, getTop() + revealAnimator.y + revealAnimator.radius);
+        }
+
+        shadowDrawable.setFillColor(spotShadowColor);
+        shadowDrawable.setShadowColor(spotShadowColor != null ? spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()) : 0xff000000);
+        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_ALWAYS);
+        shadowDrawable.setAlpha(0x44);
+        shadowDrawable.setElevation(z);
+        shadowDrawable.setShadowVerticalOffset(0);
+        shadowDrawable.setBounds(getLeft(), (int) (getTop() + z / 4), getRight(), (int) (getBottom() + z / 4));
+        shadowDrawable.draw(canvas);
+
+        canvas.translate(this.getLeft(), this.getTop());
+        paint.setXfermode(Carbon.CLEAR_MODE);
+        if (maskShadow) {
+            cornersMask.setFillType(Path.FillType.WINDING);
+            canvas.drawPath(cornersMask, paint);
+        }
+        if (r)
+            canvas.drawPath(revealAnimator.mask, paint);
+
+        canvas.restoreToCount(saveCount);
+        paint.setXfermode(null);
+        paint.setAlpha(255);
+    }
+
+    @Override
+    public void setElevationShadowColor(ColorStateList shadowColor) {
+        ambientShadowColor = spotShadowColor = shadowColor;
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public void setElevationShadowColor(int color) {
+        ambientShadowColor = spotShadowColor = ColorStateList.valueOf(color);
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public ColorStateList getElevationShadowColor() {
+        return ambientShadowColor;
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(int color) {
+        setOutlineAmbientShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(ColorStateList color) {
+        ambientShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineAmbientShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineAmbientShadowColor() {
+        return ambientShadowColor.getDefaultColor();
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(int color) {
+        setOutlineSpotShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(ColorStateList color) {
+        spotShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineSpotShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineSpotShadowColor() {
+        return spotShadowColor.getDefaultColor();
     }
 
 
@@ -507,11 +814,11 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // touch margin
     // -------------------------------
 
-    private Rect touchMargin;
+    private Rect touchMargin = new Rect();
 
     @Override
     public void setTouchMargin(int left, int top, int right, int bottom) {
-        touchMargin = new Rect(left, top, right, bottom);
+        touchMargin.set(left, top, right, bottom);
     }
 
     @Override
@@ -534,18 +841,30 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
         touchMargin.bottom = margin;
     }
 
+    @NotNull
     @Override
     public Rect getTouchMargin() {
         return touchMargin;
     }
 
+    final RectF tmpHitRect = new RectF();
+
     public void getHitRect(@NonNull Rect outRect) {
-        if (touchMargin == null) {
-            super.getHitRect(outRect);
-            return;
+        Matrix matrix = getMatrix();
+        if (matrix.isIdentity()) {
+            outRect.set(getLeft(), getTop(), getRight(), getBottom());
+        } else {
+            tmpHitRect.set(0, 0, getWidth(), getHeight());
+            matrix.mapRect(tmpHitRect);
+            outRect.set((int) tmpHitRect.left + getLeft(), (int) tmpHitRect.top + getTop(),
+                    (int) tmpHitRect.right + getLeft(), (int) tmpHitRect.bottom + getTop());
         }
-        outRect.set(getLeft() - touchMargin.left, getTop() - touchMargin.top, getRight() + touchMargin.right, getBottom() + touchMargin.bottom);
+        outRect.left -= touchMargin.left;
+        outRect.top -= touchMargin.top;
+        outRect.right += touchMargin.right;
+        outRect.bottom += touchMargin.bottom;
     }
+
 
     // -------------------------------
     // state animators
@@ -553,6 +872,7 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
     private StateAnimator stateAnimator = new StateAnimator(this);
 
+    @NotNull
     @Override
     public StateAnimator getStateAnimator() {
         return stateAnimator;
@@ -572,64 +892,87 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // animations
     // -------------------------------
 
-    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
+    private Animator inAnim = null, outAnim = null;
     private Animator animator;
 
-    public void setVisibility(final int visibility) {
+    public Animator animateVisibility(final int visibility) {
         if (visibility == View.VISIBLE && (getVisibility() != View.VISIBLE || animator != null)) {
             if (animator != null)
                 animator.cancel();
-            if (inAnim != AnimUtils.Style.None) {
-                animator = AnimUtils.animateIn(this, inAnim, new AnimatorListenerAdapter() {
+            if (inAnim != null) {
+                animator = inAnim;
+                animator.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator a) {
+                        a.removeListener(this);
                         animator = null;
-                        clearAnimation();
+                    }
+
+                    @Override
+                    public void onAnimationCancel(Animator a) {
+                        a.removeListener(this);
+                        animator = null;
                     }
                 });
+                animator.start();
             }
-            super.setVisibility(visibility);
+            setVisibility(visibility);
         } else if (visibility != View.VISIBLE && (getVisibility() == View.VISIBLE || animator != null)) {
             if (animator != null)
                 animator.cancel();
-            if (outAnim == AnimUtils.Style.None) {
-                super.setVisibility(visibility);
-                return;
+            if (outAnim == null) {
+                setVisibility(visibility);
+                return null;
             }
-            animator = AnimUtils.animateOut(this, outAnim, new AnimatorListenerAdapter() {
+            animator = outAnim;
+            animator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator a) {
                     if (((ValueAnimator) a).getAnimatedFraction() == 1)
-                        LinearLayout.super.setVisibility(visibility);
+                        setVisibility(visibility);
+                    a.removeListener(this);
                     animator = null;
-                    clearAnimation();
+                }
+
+                @Override
+                public void onAnimationCancel(Animator a) {
+                    a.removeListener(this);
+                    animator = null;
                 }
             });
+            animator.start();
+        } else {
+            setVisibility(visibility);
         }
-    }
-
-    public void setVisibilityImmediate(final int visibility) {
-        super.setVisibility(visibility);
+        return animator;
     }
 
     public Animator getAnimator() {
         return animator;
     }
 
-    public AnimUtils.Style getOutAnimation() {
+    public Animator getOutAnimator() {
         return outAnim;
     }
 
-    public void setOutAnimation(AnimUtils.Style outAnim) {
+    public void setOutAnimator(Animator outAnim) {
+        if (this.outAnim != null)
+            this.outAnim.setTarget(null);
         this.outAnim = outAnim;
+        if (outAnim != null)
+            outAnim.setTarget(this);
     }
 
-    public AnimUtils.Style getInAnimation() {
+    public Animator getInAnimator() {
         return inAnim;
     }
 
-    public void setInAnimation(AnimUtils.Style inAnim) {
+    public void setInAnimator(Animator inAnim) {
+        if (this.inAnim != null)
+            this.inAnim.setTarget(null);
         this.inAnim = inAnim;
+        if (inAnim != null)
+            inAnim.setTarget(this);
     }
 
 
@@ -637,7 +980,7 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // insets
     // -------------------------------
 
-    int insetLeft = INSET_NULL, insetTop = INSET_NULL, insetRight = INSET_NULL, insetBottom = INSET_NULL;
+    int insetLeft = InsetView.INSET_NULL, insetTop = InsetView.INSET_NULL, insetRight = InsetView.INSET_NULL, insetBottom = InsetView.INSET_NULL;
     int insetColor;
     private OnInsetsChangedListener onInsetsChangedListener;
 
@@ -690,13 +1033,13 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
     @Override
     protected boolean fitSystemWindows(@NonNull Rect insets) {
-        if (insetLeft == INSET_NULL)
+        if (insetLeft == InsetView.INSET_NULL)
             insetLeft = insets.left;
-        if (insetTop == INSET_NULL)
+        if (insetTop == InsetView.INSET_NULL)
             insetTop = insets.top;
-        if (insetRight == INSET_NULL)
+        if (insetRight == InsetView.INSET_NULL)
             insetRight = insets.right;
-        if (insetBottom == INSET_NULL)
+        if (insetBottom == InsetView.INSET_NULL)
             insetBottom = insets.bottom;
         insets.set(insetLeft, insetTop, insetRight, insetBottom);
         if (onInsetsChangedListener != null)
@@ -711,11 +1054,119 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
 
     // -------------------------------
-    // View utils
+    // ViewGroup utils
     // -------------------------------
+
+    List<View> views = new ArrayList<>();
+
+    public List<View> getViews() {
+        views.clear();
+        for (int i = 0; i < getChildCount(); i++)
+            views.add(getChildAt(i));
+        return views;
+    }
 
     public void setOnDispatchTouchListener(OnTouchListener onDispatchTouchListener) {
         this.onDispatchTouchListener = onDispatchTouchListener;
+    }
+
+    public Component findComponentById(int id) {
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof ComponentView && ((ComponentView) child).getComponent().getView().getId() == id)
+                    return ((ComponentView) child).getComponent();
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return null;
+    }
+
+    public List<Component> findComponentsById(int id) {
+        List<Component> result = new ArrayList<>();
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof ComponentView && ((ComponentView) child).getComponent().getView().getId() == id)
+                    result.add(((ComponentView) child).getComponent());
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return result;
+    }
+
+    public Component findComponentOfType(Class type) {
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof ComponentView && ((ComponentView) child).getComponent().getClass().equals(type))
+                    return ((ComponentView) child).getComponent();
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return null;
+    }
+
+    public List<Component> findComponentsOfType(Class type) {
+        List<Component> result = new ArrayList<>();
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof ComponentView && ((ComponentView) child).getComponent().getClass().equals(type))
+                    result.add(((ComponentView) child).getComponent());
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return result;
+    }
+
+    public <Type extends View> Type findViewOfType(Class<Type> type) {
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getClass().equals(type))
+                    return (Type) child;
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return null;
+    }
+
+    public <Type extends View> List<Type> findViewsOfType(Class<Type> type) {
+        List<Type> result = new ArrayList<>();
+        List<ViewGroup> groups = new ArrayList<>();
+        groups.add(this);
+        while (!groups.isEmpty()) {
+            ViewGroup group = groups.remove(0);
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getClass().equals(type))
+                    result.add((Type) child);
+                if (child instanceof ViewGroup)
+                    groups.add((ViewGroup) child);
+            }
+        }
+        return result;
     }
 
     public List<View> findViewsById(int id) {
@@ -752,6 +1203,63 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
         return result;
     }
 
+    public View inflate(@LayoutRes int id) {
+        return LayoutInflater.from(getContext()).inflate(id, this);
+    }
+
+    public View inflate(@LayoutRes int id, boolean attach) {
+        return LayoutInflater.from(getContext()).inflate(id, this, attach);
+    }
+
+
+    // -------------------------------
+    // stroke
+    // -------------------------------
+
+    private ColorStateList stroke;
+    private float strokeWidth;
+    private Paint strokePaint;
+
+    private void drawStroke(Canvas canvas) {
+        strokePaint.setStrokeWidth(strokeWidth * 2);
+        strokePaint.setColor(stroke.getColorForState(getDrawableState(), stroke.getDefaultColor()));
+        cornersMask.setFillType(Path.FillType.WINDING);
+        canvas.drawPath(cornersMask, strokePaint);
+    }
+
+    @Override
+    public void setStroke(ColorStateList colorStateList) {
+        stroke = colorStateList;
+
+        if (stroke == null)
+            return;
+
+        if (strokePaint == null) {
+            strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+        }
+    }
+
+    @Override
+    public void setStroke(int color) {
+        setStroke(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public ColorStateList getStroke() {
+        return stroke;
+    }
+
+    @Override
+    public void setStrokeWidth(float strokeWidth) {
+        this.strokeWidth = strokeWidth;
+    }
+
+    @Override
+    public float getStrokeWidth() {
+        return strokeWidth;
+    }
+
 
     // -------------------------------
     // layout params
@@ -772,55 +1280,17 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
         return new LayoutParams(p);
     }
 
-    private void layoutAnchoredViews() {
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child.getVisibility() != GONE) {
-                LayoutParams lp = (LayoutParams) child.getLayoutParams();
-                if (lp.anchorView != 0) {
-                    View anchorView = findViewById(lp.anchorView);
-                    if (anchorView != null && anchorView != child) {
-                        int left = child.getLeft();
-                        int right = child.getRight();
-                        int top = child.getTop();
-                        int bottom = child.getBottom();
-                        if ((lp.anchorGravity & Gravity.BOTTOM) == Gravity.BOTTOM) {
-                            top = anchorView.getBottom() - lp.height / 2;
-                            bottom = top + lp.height;
-                        }
-                        if ((lp.anchorGravity & Gravity.TOP) == Gravity.TOP) {
-                            top = anchorView.getTop() - lp.height / 2;
-                            bottom = top + lp.height;
-                        }
-                        if ((GravityCompat.getAbsoluteGravity(lp.anchorGravity, ViewCompat.getLayoutDirection(child)) & Gravity.LEFT) == Gravity.LEFT) {
-                            left = anchorView.getLeft() - lp.width / 2;
-                            right = left + lp.width;
-                        }
-                        if ((GravityCompat.getAbsoluteGravity(lp.anchorGravity, ViewCompat.getLayoutDirection(child)) & Gravity.RIGHT) == Gravity.RIGHT) {
-                            left = anchorView.getRight() - lp.width / 2;
-                            right = left + lp.width;
-                        }
-                        child.layout(left, top, right, bottom);
-                    }
-                }
-            }
-        }
-    }
-
-    public static class LayoutParams extends android.widget.LinearLayout.LayoutParams implements PercentLayoutHelper.PercentLayoutParams {
-        private PercentLayoutHelper.PercentLayoutInfo percentLayoutInfo;
-        public int anchorView;
-        private int anchorGravity;
+    public static class LayoutParams extends android.widget.LinearLayout.LayoutParams {
 
         public LayoutParams(Context c, AttributeSet attrs) {
             super(c, attrs);
 
-            TypedArray a = c.obtainStyledAttributes(attrs, R.styleable.FrameLayout_Layout);
-            anchorView = a.getResourceId(R.styleable.FrameLayout_Layout_carbon_anchor, -1);
-            anchorGravity = a.getInt(R.styleable.FrameLayout_Layout_carbon_anchorGravity, -1);
+            TypedArray a = c.obtainStyledAttributes(attrs, R.styleable.LinearLayout_Layout);
+            if (a.hasValue(R.styleable.LinearLayout_Layout_carbon_layout_marginHorizontal))
+                leftMargin = rightMargin = a.getDimensionPixelSize(R.styleable.LinearLayout_Layout_carbon_layout_marginHorizontal, 0);
+            if (a.hasValue(R.styleable.LinearLayout_Layout_carbon_layout_marginVertical))
+                topMargin = bottomMargin = a.getDimensionPixelSize(R.styleable.LinearLayout_Layout_carbon_layout_marginVertical, 0);
             a.recycle();
-
-            percentLayoutInfo = PercentLayoutHelper.getPercentLayoutInfo(c, attrs);
         }
 
         public LayoutParams(int w, int h) {
@@ -847,40 +1317,10 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
 
         public LayoutParams(android.widget.LinearLayout.LayoutParams source) {
             super((MarginLayoutParams) source);
-            gravity = source.gravity;
         }
 
         public LayoutParams(LayoutParams source) {
             super((MarginLayoutParams) source);
-
-            this.anchorView = source.anchorView;
-            this.anchorGravity = source.anchorGravity;
-            percentLayoutInfo = source.percentLayoutInfo;
-        }
-
-        @Override
-        public PercentLayoutHelper.PercentLayoutInfo getPercentLayoutInfo() {
-            if (percentLayoutInfo == null) {
-                percentLayoutInfo = new PercentLayoutHelper.PercentLayoutInfo();
-            }
-
-            return percentLayoutInfo;
-        }
-
-        public int getAnchorGravity() {
-            return anchorGravity;
-        }
-
-        public void setAnchorGravity(int anchorGravity) {
-            this.anchorGravity = anchorGravity;
-        }
-
-        public int getAnchorView() {
-            return anchorView;
-        }
-
-        public void setAnchorView(int anchorView) {
-            this.anchorView = anchorView;
         }
     }
 
@@ -892,36 +1332,38 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     int maxWidth = Integer.MAX_VALUE, maxHeight = Integer.MAX_VALUE;
 
     @Override
-    public int getMaximumWidth() {
+    public int getMaxWidth() {
         return maxWidth;
     }
 
     @Override
-    public void setMaximumWidth(int maxWidth) {
+    public void setMaxWidth(int maxWidth) {
         this.maxWidth = maxWidth;
         requestLayout();
     }
 
     @Override
-    public int getMaximumHeight() {
+    public int getMaxHeight() {
         return maxHeight;
     }
 
     @Override
-    public void setMaximumHeight(int maxHeight) {
+    public void setMaxHeight(int maxHeight) {
         this.maxHeight = maxHeight;
         requestLayout();
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        percentLayoutHelper.adjustChildren(widthMeasureSpec, heightMeasureSpec);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (percentLayoutHelper.handleMeasuredStateTooSmall())
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         if (getMeasuredWidth() > maxWidth || getMeasuredHeight() > maxHeight) {
             if (getMeasuredWidth() > maxWidth)
                 widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.EXACTLY);
+            if (getMeasuredHeight() > maxHeight)
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.EXACTLY);
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+        if (getMeasuredHeight() > maxHeight) {
             if (getMeasuredHeight() > maxHeight)
                 heightMeasureSpec = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.EXACTLY);
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -933,169 +1375,160 @@ public class LinearLayout extends android.widget.LinearLayout implements ShadowV
     // transformations
     // -------------------------------
 
-    public float getAlpha() {
-        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    List<OnTransformationChangedListener> transformationChangedListeners = new ArrayList<>();
+
+    public void addOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.add(listener);
     }
 
-    public void setAlpha(float alpha) {
-        if (NEEDS_PROXY) {
-            wrap(this).setAlpha(alpha);
-        } else {
-            super.setAlpha(alpha);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+    public void removeOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.remove(listener);
     }
 
-    public float getPivotX() {
-        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    public void clearOnTransformationChangedListeners() {
+        transformationChangedListeners.clear();
     }
 
-    public void setPivotX(float pivotX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotX(pivotX);
-        } else {
-            super.setPivotX(pivotX);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+    private void fireOnTransformationChangedListener() {
+        if (transformationChangedListeners == null)
+            return;
+        for (OnTransformationChangedListener listener : transformationChangedListeners)
+            listener.onTransformationChanged();
     }
 
-    public float getPivotY() {
-        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
-    }
-
-    public void setPivotY(float pivotY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotY(pivotY);
-        } else {
-            super.setPivotY(pivotY);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
-    }
-
-    public float getRotation() {
-        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
-    }
-
+    @Override
     public void setRotation(float rotation) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotation(rotation);
-        } else {
-            super.setRotation(rotation);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setRotation(rotation);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getRotationX() {
-        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
-    }
-
-    public void setRotationX(float rotationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationX(rotationX);
-        } else {
-            super.setRotationX(rotationX);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
-    }
-
-    public float getRotationY() {
-        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
-    }
-
+    @Override
     public void setRotationY(float rotationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationY(rotationY);
-        } else {
-            super.setRotationY(rotationY);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setRotationY(rotationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleX() {
-        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    @Override
+    public void setRotationX(float rotationX) {
+        super.setRotationX(rotationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
     public void setScaleX(float scaleX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleX(scaleX);
-        } else {
-            super.setScaleX(scaleX);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setScaleX(scaleX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleY() {
-        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
-    }
-
+    @Override
     public void setScaleY(float scaleY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleY(scaleY);
-        } else {
-            super.setScaleY(scaleY);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setScaleY(scaleY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationX() {
-        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    @Override
+    public void setPivotX(float pivotX) {
+        super.setPivotX(pivotX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
+    public void setPivotY(float pivotY) {
+        super.setPivotY(pivotY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
+    public void setAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
+        super.setAlpha(alpha);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
     public void setTranslationX(float translationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationX(translationX);
-        } else {
-            super.setTranslationX(translationX);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setTranslationX(translationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationY() {
-        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
-    }
-
+    @Override
     public void setTranslationY(float translationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationY(translationY);
-        } else {
-            super.setTranslationY(translationY);
-        }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+        super.setTranslationY(translationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getX() {
-        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
-    }
-
-    public void setX(float x) {
-        if (NEEDS_PROXY) {
-            wrap(this).setX(x);
+    public void setWidth(int width) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
         } else {
-            super.setX(x);
+            layoutParams.width = width;
+            setLayoutParams(layoutParams);
         }
     }
 
-    public float getY() {
-        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
+    public void setHeight(int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, height));
+        } else {
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
+        }
     }
 
-    public void setY(float y) {
-        if (NEEDS_PROXY) {
-            wrap(this).setY(y);
+    public void setSize(int width, int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, height));
         } else {
-            super.setY(y);
+            layoutParams.width = width;
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
         }
-        if (elevation + translationZ > 0 && getParent() != null && getParent() instanceof View)
-            ((View) getParent()).invalidate();
+    }
+
+    public void setBounds(int x, int y, int width, int height) {
+        setSize(width, height);
+        setTranslationX(x);
+        setTranslationY(y);
+    }
+
+
+    // -------------------------------
+    // dependency
+    // -------------------------------
+
+    private List<Behavior> behaviors = new ArrayList<>();
+
+    @Override
+    public void addBehavior(@NotNull Behavior behavior) {
+        behaviors.add(behavior);
+    }
+
+    @Override
+    public void removeBehavior(@NotNull Behavior behavior) {
+        behaviors.remove(behavior);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        Stream.of(behaviors).forEach(Behavior::onDetachedFromWindow);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        Stream.of(behaviors).forEach(Behavior::onAttachedToWindow);
     }
 }

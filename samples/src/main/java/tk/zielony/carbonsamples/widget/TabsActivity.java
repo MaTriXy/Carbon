@@ -1,38 +1,42 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
-import android.support.v4.view.PagerAdapter;
 import android.view.View;
 import android.view.ViewGroup;
 
-import carbon.widget.CardView;
-import carbon.widget.PagerTabStrip;
-import carbon.widget.ViewPager;
-import tk.zielony.carbonsamples.R;
+import androidx.annotation.NonNull;
+import androidx.viewpager.widget.PagerAdapter;
 
-/**
- * Created by Marcin on 2014-12-15.
- */
-public class TabsActivity extends Activity {
+import carbon.widget.RelativeLayout;
+import carbon.widget.TabLayout;
+import carbon.widget.ViewPager;
+import carbon.widget.ViewPagerIndicator;
+import tk.zielony.carbonsamples.SampleAnnotation;
+import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
+
+@SampleAnnotation(layoutId = R.layout.activity_tabs, titleId = R.string.tabsActivity_title)
+public class TabsActivity extends ThemedActivity {
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_tabs);
 
-        ViewPager pager = (ViewPager) findViewById(R.id.pager);
+        initToolbar();
+
+        ViewPager pager = findViewById(R.id.pager);
         pager.setAdapter(new PagerAdapter() {
             @Override
             public CharSequence getPageTitle(int position) {
                 return "Page " + position;
             }
 
-            public View getView(int position, ViewPager pager) {
-                return new CardView(pager.getContext());
+            View getView(int position, ViewPager pager) {
+                return new RelativeLayout(pager.getContext(), null, R.attr.carbon_cardViewStyle);
             }
 
             @Override
-            public boolean isViewFromObject(View view, Object object) {
+            public boolean isViewFromObject(@NonNull View view, @NonNull Object object) {
                 return view == object;
             }
 
@@ -41,8 +45,9 @@ public class TabsActivity extends Activity {
                 return 7;
             }
 
+            @NonNull
             @Override
-            public Object instantiateItem(ViewGroup container, int position) {
+            public Object instantiateItem(@NonNull ViewGroup container, int position) {
                 ViewPager pager = (ViewPager) container;
                 View view = getView(position, pager);
 
@@ -52,12 +57,14 @@ public class TabsActivity extends Activity {
             }
 
             @Override
-            public void destroyItem(ViewGroup container, int position, Object view) {
-                ((ViewPager) container).removeView((View) view);
+            public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object view) {
+                container.removeView((View) view);
             }
 
         });
-        PagerTabStrip tabs = (PagerTabStrip) findViewById(R.id.pager_title_strip);
+        TabLayout tabs = findViewById(R.id.tabs);
         tabs.setViewPager(pager);
+        ViewPagerIndicator indicator = findViewById(R.id.indicator);
+        indicator.setViewPager(pager);
     }
 }

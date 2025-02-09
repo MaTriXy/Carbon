@@ -2,86 +2,93 @@ package carbon.widget;
 
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
-import android.graphics.PointF;
-import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.Nullable;
-import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.SoundEffectConstants;
 import android.view.ViewDebug;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Checkable;
 import android.widget.CompoundButton;
 
+import androidx.annotation.AttrRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StyleRes;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
+
+import carbon.Carbon;
 import carbon.R;
-import carbon.drawable.CheckableDrawable;
-import carbon.drawable.DefaultColorStateList;
+import carbon.drawable.ButtonGravity;
 import carbon.drawable.ripple.RippleDrawable;
 
-/**
- * Created by Marcin on 2015-03-06.
- */
-public class RadioButton extends carbon.widget.Button implements Checkable {
-    private CheckableDrawable drawable;
+public class RadioButton extends TextView implements Checkable {
+    private Drawable drawable;
     private float drawablePadding;
+    private ButtonGravity buttonGravity;
 
     public RadioButton(Context context) {
         super(context, null, android.R.attr.radioButtonStyle);
-        initRadioButton(null, android.R.attr.radioButtonStyle);
+        initRadioButton(null, android.R.attr.radioButtonStyle, R.style.carbon_RadioButton);
     }
 
     public RadioButton(Context context, AttributeSet attrs) {
         super(context, attrs, android.R.attr.radioButtonStyle);
-        initRadioButton(attrs, android.R.attr.radioButtonStyle);
+        initRadioButton(attrs, android.R.attr.radioButtonStyle, R.style.carbon_RadioButton);
     }
 
-    public RadioButton(Context context, AttributeSet attrs, int defStyleAttr) {
+    public RadioButton(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initRadioButton(attrs, defStyleAttr);
+        initRadioButton(attrs, defStyleAttr, R.style.carbon_RadioButton);
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public RadioButton(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public RadioButton(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        initRadioButton(attrs, defStyleAttr);
+        initRadioButton(attrs, defStyleAttr, defStyleRes);
     }
 
-    public void initRadioButton(AttributeSet attrs, int defStyleAttr) {
-        CheckableDrawable d = new CheckableDrawable(getContext(), R.raw.carbon_radiobutton_checked, R.raw.carbon_radiobutton_unchecked, R.raw.carbon_radiobutton_filled, new PointF(0, 0));
-        setButtonDrawable(d);
+    public void initRadioButton(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.RadioButton, defStyleAttr, defStyleRes);
 
-        if (attrs != null) {
-            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.RadioButton, defStyleAttr, 0);
+        setButtonDrawable(Carbon.getDrawable(this, a, R.styleable.RadioButton_android_button, R.drawable.carbon_radio_anim));
 
-            for (int i = 0; i < a.getIndexCount(); i++) {
-                int attr = a.getIndex(i);
-                if (attr == R.styleable.RadioButton_android_drawablePadding) {
-                    drawablePadding = a.getDimension(attr, 0);
-                } else if (attr == R.styleable.RadioButton_android_checked) {
-                    setCheckedImmediate(a.getBoolean(attr, false));
-                }
+        for (int i = 0; i < a.getIndexCount(); i++) {
+            int attr = a.getIndex(i);
+            if (attr == R.styleable.RadioButton_android_drawablePadding) {
+                drawablePadding = a.getDimension(attr, 0);
+            } else if (attr == R.styleable.RadioButton_android_checked) {
+                setChecked(a.getBoolean(attr, false));
+            } else if (attr == R.styleable.RadioButton_carbon_buttonGravity) {
+                buttonGravity = ButtonGravity.values()[a.getInt(attr, 0)];
             }
-
-            a.recycle();
         }
+
+        a.recycle();
     }
 
     private boolean isLayoutRtl() {
         return ViewCompat.getLayoutDirection(this) == ViewCompat.LAYOUT_DIRECTION_RTL;
     }
 
-    private boolean mChecked;
+    private boolean isButtonOnTheLeft() {
+        return buttonGravity == ButtonGravity.LEFT ||
+                !isLayoutRtl() && buttonGravity == ButtonGravity.START ||
+                isLayoutRtl() && buttonGravity == ButtonGravity.END;
+    }
+
+
+    private boolean checked;
     private boolean mBroadcasting;
 
-    private OnCheckedChangeListener mOnCheckedChangeListener;
+    private OnCheckedChangeListener onCheckedChangeListener;
     private OnCheckedChangeListener mOnCheckedChangeWidgetListener;
 
     private static final int[] CHECKED_STATE_SET = {
@@ -89,13 +96,15 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
     };
 
     public void toggle() {
-        if (!mChecked)
-            setChecked(true);
+        setChecked(!isChecked());
     }
 
     @Override
     public boolean performClick() {
-        toggle();
+        setChecked(true);
+
+        if (onCheckedChangeListener != null)
+            onCheckedChangeListener.onCheckedChanged(this, checked);
 
         final boolean handled = super.performClick();
         if (!handled) {
@@ -109,7 +118,7 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
 
     @ViewDebug.ExportedProperty
     public boolean isChecked() {
-        return mChecked;
+        return checked;
     }
 
     /**
@@ -118,8 +127,8 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
      * @param checked true to check the button, false to uncheck it
      */
     public void setChecked(boolean checked) {
-        if (mChecked != checked) {
-            mChecked = checked;
+        if (this.checked != checked) {
+            this.checked = checked;
             refreshDrawableState();
             //notifyViewAccessibilityStateChangedIfNeeded(
             //      AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
@@ -130,35 +139,26 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
             }
 
             mBroadcasting = true;
-            if (mOnCheckedChangeListener != null) {
-                mOnCheckedChangeListener.onCheckedChanged(this, mChecked);
-            }
             if (mOnCheckedChangeWidgetListener != null) {
-                mOnCheckedChangeWidgetListener.onCheckedChanged(this, mChecked);
+                mOnCheckedChangeWidgetListener.onCheckedChanged(this, checked);
             }
 
             mBroadcasting = false;
         }
     }
 
-    public void setCheckedImmediate(boolean checked) {
-        setChecked(checked);
-        drawable.setCheckedImmediate(checked);
-    }
-
     /**
-     * Register a callback to be invoked when the checked state of this button
-     * changes.
+     * Register a callback to be invoked when the checked state of this button changes.
      *
      * @param listener the callback to call on checked state change
      */
     public void setOnCheckedChangeListener(OnCheckedChangeListener listener) {
-        mOnCheckedChangeListener = listener;
+        onCheckedChangeListener = listener;
     }
 
     /**
-     * Register a callback to be invoked when the checked state of this button
-     * changes. This callback is used for internal purpose only.
+     * Register a callback to be invoked when the checked state of this button changes. This
+     * callback is used for internal purpose only.
      *
      * @param listener the callback to call on checked state change
      * @hide
@@ -168,25 +168,11 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
     }
 
     /**
-     * Interface definition for a callback to be invoked when the checked state
-     * of a compound button changed.
-     */
-    public interface OnCheckedChangeListener {
-        /**
-         * Called when the checked state of a compound button has changed.
-         *
-         * @param buttonView The compound button view whose state has changed.
-         * @param isChecked  The new checked state of buttonView.
-         */
-        void onCheckedChanged(RadioButton buttonView, boolean isChecked);
-    }
-
-    /**
      * Set the button graphic to a given Drawable
      *
      * @param d The Drawable to use as the button graphic
      */
-    public void setButtonDrawable(CheckableDrawable d) {
+    public void setButtonDrawable(Drawable d) {
         if (drawable != d) {
             if (drawable != null) {
                 drawable.setCallback(null);
@@ -196,6 +182,7 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
             drawable = d;
 
             if (d != null) {
+                drawable = DrawableCompat.wrap(d);
                 d.setCallback(this);
                 //d.setLayoutDirection(getLayoutDirection());
                 if (d.isStateful()) {
@@ -203,64 +190,65 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
                 }
                 d.setVisible(getVisibility() == VISIBLE, false);
                 setMinHeight(d.getIntrinsicHeight());
-                applyButtonTint();
+                applyTint();
             }
         }
     }
 
-    public void setTint(@Nullable ColorStateList list) {
-        super.setTint(list);
-        applyButtonTint();
+    public ButtonGravity getButtonGravity() {
+        return buttonGravity;
+    }
+
+    public void setButtonGravity(ButtonGravity buttonGravity) {
+        this.buttonGravity = buttonGravity;
     }
 
     @Override
-    public void setTint(int color) {
-        if (color == 0) {
-            setTint(new DefaultColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
+    protected void updateTint() {
+        super.updateTint();
+        if (drawable != null && tint != null && tintMode != null)
+            drawable.setColorFilter(new PorterDuffColorFilter(tint.getColorForState(getDrawableState(), tint.getDefaultColor()), tintMode));
     }
 
-    public void setTintMode(@Nullable PorterDuff.Mode mode) {
-        super.setTintMode(mode);
-        applyButtonTint();
-    }
-
-    private void applyButtonTint() {
-        if (drawable != null && getTint() != null && getTintMode() != null) {
-            drawable = (CheckableDrawable) drawable.mutate();
-
-            drawable.setTint(getTint());
-            drawable.setTintMode(getTintMode());
+    @Override
+    protected void applyTint() {
+        super.applyTint();
+        if (drawable != null) {
+            if (tint != null && tintMode != null) {
+                Carbon.setTintListMode(drawable, tint, tintMode);
+            } else {
+                Carbon.clearTint(drawable);
+            }
 
             // The drawable (or one of its children) may not have been
             // stateful before applying the tint, so let's try again.
-            if (drawable.isStateful()) {
+            if (drawable.isStateful())
                 drawable.setState(getDrawableState());
-            }
         }
+    }
+
+    @Override
+    public CharSequence getAccessibilityClassName() {
+        return RadioButton.class.getSimpleName();
     }
 
     @Override
     public void onInitializeAccessibilityEvent(AccessibilityEvent event) {
         super.onInitializeAccessibilityEvent(event);
-        event.setClassName(RadioButton.class.getName());
-        event.setChecked(mChecked);
+        event.setChecked(isChecked());
     }
 
-    /*@Override
+    @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        info.setClassName(RadioButton.class.getName());
         info.setCheckable(true);
-        info.setChecked(mChecked);
-    }*/
+        info.setChecked(isChecked());
+    }
 
     @Override
     public int getCompoundPaddingLeft() {
         int padding = super.getCompoundPaddingLeft();
-        if (!isLayoutRtl()) {
+        if (isButtonOnTheLeft()) {
             final Drawable buttonDrawable = drawable;
             if (buttonDrawable != null) {
                 padding += buttonDrawable.getIntrinsicWidth() + drawablePadding;
@@ -272,7 +260,7 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
     @Override
     public int getCompoundPaddingRight() {
         int padding = super.getCompoundPaddingRight();
-        if (isLayoutRtl()) {
+        if (!isButtonOnTheLeft()) {
             final Drawable buttonDrawable = drawable;
             if (buttonDrawable != null) {
                 padding += buttonDrawable.getIntrinsicWidth() + drawablePadding;
@@ -301,8 +289,8 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
                     top = 0;
             }
             final int bottom = top + drawableHeight;
-            final int left = isLayoutRtl() ? getWidth() - drawableWidth - getPaddingRight() : getPaddingLeft();
-            final int right = isLayoutRtl() ? getWidth() - getPaddingRight() : drawableWidth + getPaddingLeft();
+            final int left = isButtonOnTheLeft() ? getPaddingLeft() : getWidth() - drawableWidth - getPaddingRight();
+            final int right = isButtonOnTheLeft() ? drawableWidth + getPaddingLeft() : getWidth() - getPaddingRight();
 
             buttonDrawable.setBounds(left, top, right, bottom);
 
@@ -330,8 +318,11 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
 
     @Override
     protected int[] onCreateDrawableState(int extraSpace) {
-        final int[] drawableState = super.onCreateDrawableState(extraSpace + 1);
+        int[] drawableState = super.onCreateDrawableState(extraSpace);
         if (isChecked()) {
+            int[] state = new int[drawableState.length + 1];
+            System.arraycopy(drawableState, 0, state, 0, drawableState.length);
+            drawableState = state;
             mergeDrawableStates(drawableState, CHECKED_STATE_SET);
         }
         return drawableState;
@@ -341,23 +332,19 @@ public class RadioButton extends carbon.widget.Button implements Checkable {
     protected void drawableStateChanged() {
         super.drawableStateChanged();
 
-        if (drawable != null) {
-            int[] myDrawableState = getDrawableState();
-
-            // Set the state of the Drawable
-            drawable.setState(myDrawableState);
-
-            invalidate();
+        Drawable d = drawable;
+        if (d != null && d.isStateful()
+                && d.setState(getDrawableState())) {
+            invalidateDrawable(d);
         }
     }
 
     @Override
-    protected boolean verifyDrawable(Drawable who) {
+    protected boolean verifyDrawable(@NonNull Drawable who) {
         return super.verifyDrawable(who) || who == drawable;
     }
 
     @Override
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public void jumpDrawablesToCurrentState() {
         super.jumpDrawablesToCurrentState();
         if (drawable != null) drawable.jumpToCurrentState();

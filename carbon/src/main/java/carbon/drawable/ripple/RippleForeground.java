@@ -1,16 +1,14 @@
 package carbon.drawable.ripple;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
-
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.AnimatorListenerAdapter;
-import com.nineoldandroids.animation.AnimatorSet;
-import com.nineoldandroids.animation.ObjectAnimator;
-import com.nineoldandroids.util.FloatProperty;
 
 import carbon.internal.MathUtils;
 
@@ -69,7 +67,7 @@ class RippleForeground extends RippleComponent {
      */
     private boolean mHasFinishedExit;
 
-    public RippleForeground(RippleDrawableFroyo owner, Rect bounds, float startingX, float startingY,
+    public RippleForeground(RippleDrawableICS owner, Rect bounds, float startingX, float startingY,
                             boolean isBounded) {
         super(owner, bounds);
 
@@ -120,8 +118,8 @@ class RippleForeground extends RippleComponent {
     }
 
     /**
-     * Specifies the starting position relative to the drawable bounds. No-op if
-     * the ripple has already entered.
+     * Specifies the starting position relative to the drawable bounds. No-op if the ripple has
+     * already entered.
      */
     public void move(float x, float y) {
         mStartingX = x;

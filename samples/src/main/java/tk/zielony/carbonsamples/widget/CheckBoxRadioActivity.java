@@ -1,38 +1,47 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
-import android.view.View;
+import android.view.LayoutInflater;
 
+import androidx.databinding.DataBindingUtil;
+
+import carbon.drawable.CheckedState;
 import carbon.widget.CheckBox;
 import tk.zielony.carbonsamples.R;
-import tk.zielony.carbonsamples.Samples;
+import tk.zielony.carbonsamples.SampleAnnotation;
+import tk.zielony.carbonsamples.ThemedActivity;
+import tk.zielony.carbonsamples.databinding.ActivityCheckboxRadioBinding;
 
-/**
- * Created by Marcin on 2015-03-06.
- */
-public class CheckBoxRadioActivity extends Activity {
+@SampleAnnotation(
+        titleId = R.string.checkBoxRadioActivity_title,
+        iconId = R.drawable.ic_check_box_black_24dp
+)
+public class CheckBoxRadioActivity extends ThemedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_checkbox_radio);
+        ActivityCheckboxRadioBinding binding = DataBindingUtil.inflate(LayoutInflater.from(this), R.layout.activity_checkbox_radio, null, false);
+        setContentView(binding.getRoot());
 
-        Samples.initToolbar(this,getString(R.string.checkBoxRadioActivity_title));
+        initToolbar();
 
-        final CheckBox checkBox = (CheckBox) findViewById(R.id.checkBox);
+        binding.check.setOnClickListener(view -> binding.checkBox.setChecked(true));
 
-        findViewById(R.id.check).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                checkBox.setChecked(true);
-            }
+        binding.uncheck.setOnClickListener(view -> binding.checkBox.setChecked(false));
+
+        binding.checkBoxGroup.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            binding.checkBoxChild1.setChecked(isChecked);
+            binding.checkBoxChild2.setChecked(isChecked);
         });
 
-        findViewById(R.id.uncheck).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                checkBox.setChecked(false);
+        CheckBox.OnCheckedChangeListener listener = (buttonView, isChecked) -> {
+            if (binding.checkBoxChild1.isChecked() != binding.checkBoxChild2.isChecked()) {
+                binding.checkBoxGroup.setChecked(CheckedState.INDETERMINATE);
+            } else {
+                binding.checkBoxGroup.setChecked(binding.checkBoxChild1.isChecked());
             }
-        });
+        };
+        binding.checkBoxChild1.setOnCheckedChangeListener(listener);
+        binding.checkBoxChild2.setOnCheckedChangeListener(listener);
     }
 }

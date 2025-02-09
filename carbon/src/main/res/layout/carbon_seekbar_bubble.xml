@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <carbon.widget.FrameLayout android:id="@+id/carbon_popupContainer"
-                           xmlns:android="http://schemas.android.com/apk/res/android"
-                           xmlns:app="http://schemas.android.com/apk/res-auto"
-                           android:layout_width="match_parent"
-                           android:layout_height="match_parent">
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
     <carbon.widget.FrameLayout
         android:id="@+id/carbon_bubble"
@@ -16,16 +16,17 @@
         <carbon.widget.ImageView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:carbon_src="@raw/carbon_bubble"
-            app:carbon_tint="?attr/colorAccent"/>
+            app:carbon_src="@drawable/carbon_bubble"
+            app:carbon_tint="?attr/colorSecondary" />
 
         <carbon.widget.TextView
+            android:theme="?attr/carbon_themeOverlayInverse"
             android:id="@+id/carbon_label"
             android:layout_width="26dp"
             android:layout_height="26dp"
             android:gravity="center"
             android:maxLines="1"
-            android:textAppearance="?attr/carbon_textAppearanceBody1Inverse"
-            android:textSize="10sp"/>
+            android:textAppearance="?attr/carbon_textAppearanceBody1"
+            android:textSize="10sp" />
     </carbon.widget.FrameLayout>
 </carbon.widget.FrameLayout>

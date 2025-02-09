@@ -1,6 +1,5 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
 
 import java.text.Format;
@@ -9,21 +8,21 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import carbon.Carbon;
 import carbon.beta.TableLayout;
 import carbon.widget.TableView;
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2015-12-20.
- */
-public class TableLayoutActivity extends Activity {
+@SampleAnnotation(layoutId = R.layout.activity_tablelayout, titleId = R.string.tableLayoutActivity_title)
+public class TableLayoutActivity extends ThemedActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_tablelayout);
 
-        TableLayout tableLayout = (TableLayout) findViewById(R.id.tableLayout);
+        initToolbar();
+
+        TableLayout tableLayout = findViewById(R.id.tableLayout);
         List<List<Object>> items = new ArrayList<>();
         items.add(Arrays.asList(new Object[]{"Samsung", "GT-9001", 0.32f, false}));
         items.add(Arrays.asList(new Object[]{"Sony", "Z3c", 0.14f, false}));
@@ -31,8 +30,6 @@ public class TableLayoutActivity extends Activity {
         List<String> names = Arrays.asList("Manufacturer", "Model", "Percentage", "Emulator");
         List<Class> classes = Arrays.asList(new Class[]{String.class, String.class, Float.class, Boolean.class});
         tableLayout.setAdapter(new MyTableAdapter(tableLayout.getTableView(), items, names, classes));
-        tableLayout.getToolbar().setTitle("Devices");
-        tableLayout.getToolbar().getTitleView().setTextColor(Carbon.getThemeColor(this, android.R.attr.textColorSecondary));
     }
 
     public static class MyTableAdapter extends TableView.Adapter {

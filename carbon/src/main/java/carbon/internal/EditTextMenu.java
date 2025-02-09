@@ -1,5 +1,7 @@
 package carbon.internal;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Rect;
@@ -11,17 +13,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.PopupWindow;
 
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.AnimatorListenerAdapter;
-
 import carbon.R;
 import carbon.widget.Button;
 import carbon.widget.EditText;
 import carbon.widget.LinearLayout;
 
-/**
- * Created by Marcin on 2015-09-29.
- */
 public class EditTextMenu extends PopupWindow {
     private EditText editText;
 
@@ -58,8 +54,8 @@ public class EditTextMenu extends PopupWindow {
 
         update();
 
-        LinearLayout content = (LinearLayout) getContentView().findViewById(R.id.carbon_menuContainer);
-        content.setVisibilityImmediate(View.VISIBLE);
+        LinearLayout content = getContentView().findViewById(R.id.carbon_menuContainer);
+        content.setVisibility(View.VISIBLE);
 
         return true;
     }
@@ -79,7 +75,7 @@ public class EditTextMenu extends PopupWindow {
         int[] location = new int[2];
         editText.getLocationInWindow(location);
 
-        LinearLayout content = (LinearLayout) getContentView().findViewById(R.id.carbon_menuContent);
+        LinearLayout content = getContentView().findViewById(R.id.carbon_menuContent);
         content.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(itemHeight, View.MeasureSpec.EXACTLY));
 
         int popupX = location[0] - margin;
@@ -92,7 +88,7 @@ public class EditTextMenu extends PopupWindow {
 
     @Override
     public void dismiss() {
-        LinearLayout content = (LinearLayout) getContentView().findViewById(R.id.carbon_menuContainer);
+        LinearLayout content = getContentView().findViewById(R.id.carbon_menuContainer);
         content.setVisibility(View.INVISIBLE);
         content.getAnimator().addListener(new AnimatorListenerAdapter() {
             @Override
@@ -116,22 +112,22 @@ public class EditTextMenu extends PopupWindow {
     }
 
     public void initCopy(final MenuItem item) {
-        Button button = (Button) getContentView().findViewById(R.id.carbon_copy);
+        Button button = getContentView().findViewById(R.id.carbon_copy);
         initMenuItem(item, button);
     }
 
     public void initCut(final MenuItem item) {
-        Button button = (Button) getContentView().findViewById(R.id.carbon_cut);
+        Button button = getContentView().findViewById(R.id.carbon_cut);
         initMenuItem(item, button);
     }
 
     public void initPaste(final MenuItem item) {
-        Button button = (Button) getContentView().findViewById(R.id.carbon_paste);
+        Button button = getContentView().findViewById(R.id.carbon_paste);
         initMenuItem(item, button);
     }
 
     public void initSelectAll(final MenuItem item) {
-        Button button = (Button) getContentView().findViewById(R.id.carbon_selectAll);
+        Button button = getContentView().findViewById(R.id.carbon_selectAll);
         initMenuItem(item, button);
     }
 

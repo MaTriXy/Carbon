@@ -1,30 +1,24 @@
-<carbon.widget.LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<carbon.widget.LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    android:orientation="vertical"
-    app:carbon_insetColor="?attr/colorPrimary">
+    android:orientation="vertical">
 
     <carbon.widget.Toolbar
         android:id="@+id/toolbar"
+        style="@style/carbon_Toolbar.ActionBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:carbon_icon="@null">
-
-        <carbon.widget.ImageView
-            android:id="@+id/debug"
-            style="@style/carbon_ImageView.Icon"
-            android:layout_width="@dimen/carbon_toolbarItemSize"
-            android:layout_height="@dimen/carbon_toolbarItemSize"
-            app:carbon_src="@raw/ic_bug_report_24px"
-            app:carbon_tint="?attr/colorControlNormal"/>
-    </carbon.widget.Toolbar>
+        android:text="@string/app_name"
+        app:carbon_menu="@menu/menu_main"
+        app:carbon_navigationIcon="@null" />
 
     <carbon.widget.RecyclerView
-        android:id="@+id/list"
+        android:id="@+id/recycler"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
-
+        android:layout_height="match_parent"
+        tools:itemCount="10"
+        tools:listitem="@layout/row_sample" />
 </carbon.widget.LinearLayout>

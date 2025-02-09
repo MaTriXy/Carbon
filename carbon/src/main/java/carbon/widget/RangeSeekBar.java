@@ -1,48 +1,33 @@
 package carbon.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
-import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
-import android.view.View;
 import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 
-import com.nineoldandroids.animation.Animator;
-import com.nineoldandroids.animation.AnimatorListenerAdapter;
-import com.nineoldandroids.animation.ValueAnimator;
+import androidx.annotation.AttrRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StyleRes;
+import androidx.core.view.ViewCompat;
 
 import carbon.Carbon;
 import carbon.R;
-import carbon.animation.AnimUtils;
-import carbon.animation.AnimatedColorStateList;
-import carbon.animation.AnimatedView;
-import carbon.animation.StateAnimator;
-import carbon.drawable.DefaultColorStateList;
-import carbon.drawable.DefaultPrimaryColorStateList;
-import carbon.drawable.EmptyDrawable;
 import carbon.drawable.ripple.RippleDrawable;
-import carbon.drawable.ripple.RippleView;
 import carbon.internal.SeekBarPopup;
+import carbon.view.View;
 
-import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
-import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
-
-/**
- * Created by Marcin on 2015-06-25.
- */
-public class RangeSeekBar extends View implements RippleView, StateAnimatorView, AnimatedView, TintedView {
+public class RangeSeekBar extends View {
     private static float THUMB_RADIUS, THUMB_RADIUS_DRAGGED, STROKE_WIDTH;
     float value = 0.3f, value2 = 0.7f;  // value < value2
     float min = 0, max = 1, step = 1;
@@ -76,27 +61,27 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
     }
 
     public RangeSeekBar(Context context) {
-        super(context);
-        initSeekBar(null, android.R.attr.seekBarStyle);
+        super(context, null, android.R.attr.seekBarStyle);
+        initSeekBar(null, android.R.attr.seekBarStyle, R.style.carbon_SeekBar);
     }
 
     public RangeSeekBar(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        initSeekBar(attrs, android.R.attr.seekBarStyle);
+        super(context, attrs, android.R.attr.seekBarStyle);
+        initSeekBar(attrs, android.R.attr.seekBarStyle, R.style.carbon_SeekBar);
     }
 
-    public RangeSeekBar(Context context, AttributeSet attrs, int defStyleAttr) {
+    public RangeSeekBar(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initSeekBar(attrs, defStyleAttr);
+        initSeekBar(attrs, defStyleAttr, R.style.carbon_SeekBar);
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public RangeSeekBar(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public RangeSeekBar(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        initSeekBar(attrs, defStyleAttr);
+        initSeekBar(attrs, defStyleAttr, defStyleRes);
     }
 
-    private void initSeekBar(AttributeSet attrs, int defStyleAttr) {
+    private void initSeekBar(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         if (isInEditMode())
             return;
 
@@ -106,51 +91,80 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
         THUMB_RADIUS_DRAGGED = Carbon.getDip(getContext()) * 10;
         STROKE_WIDTH = Carbon.getDip(getContext()) * 2;
 
-        if (attrs != null) {
-            Carbon.initAnimations(this, attrs, defStyleAttr);
-            Carbon.initTint(this, attrs, defStyleAttr);
-            Carbon.initRippleDrawable(this, attrs, defStyleAttr);
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.SeekBar, defStyleAttr, defStyleRes);
 
-            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.SeekBar, defStyleAttr, 0);
+        setStyle(Style.values()[a.getInt(R.styleable.SeekBar_carbon_barStyle, 0)]);
+        setMin(a.getFloat(R.styleable.SeekBar_carbon_min, 0));
+        setMax(a.getFloat(R.styleable.SeekBar_carbon_max, 0));
+        setStepSize(a.getFloat(R.styleable.SeekBar_carbon_stepSize, 0));
+        setValue(a.getFloat(R.styleable.SeekBar_carbon_value, 0));
+        setValue2(a.getFloat(R.styleable.SeekBar_carbon_value2, 0));
+        setTick(a.getBoolean(R.styleable.SeekBar_carbon_tick, true));
+        setTickStep(a.getInt(R.styleable.SeekBar_carbon_tickStep, 1));
+        setTickColor(a.getColor(R.styleable.SeekBar_carbon_tickColor, 0));
+        setShowLabel(a.getBoolean(R.styleable.SeekBar_carbon_showLabel, false));
+        setLabelFormat(a.getString(R.styleable.SeekBar_carbon_labelFormat));
 
-            setStyle(Style.values()[a.getInt(R.styleable.SeekBar_carbon_barStyle, 0)]);
-            setMin(a.getFloat(R.styleable.SeekBar_carbon_min, 0));
-            setMax(a.getFloat(R.styleable.SeekBar_carbon_max, 0));
-            setStepSize(a.getFloat(R.styleable.SeekBar_carbon_stepSize, 0));
-            setValue(a.getFloat(R.styleable.SeekBar_carbon_value, 0));
-            setValue2(a.getFloat(R.styleable.SeekBar_carbon_value2, 0));
-            setTick(a.getBoolean(R.styleable.SeekBar_carbon_tick, true));
-            setTickStep(a.getInt(R.styleable.SeekBar_carbon_tickStep, 1));
-            setTickColor(a.getColor(R.styleable.SeekBar_carbon_tickColor, 0));
-            setShowLabel(a.getBoolean(R.styleable.SeekBar_carbon_showLabel, false));
-            setLabelFormat(a.getString(R.styleable.SeekBar_carbon_labelFormat));
-
-            a.recycle();
-        }
+        a.recycle();
 
         setFocusableInTouchMode(false); // TODO: from theme
     }
 
     @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
+    protected int getSuggestedMinimumWidth() {
+        return Math.max((int) Math.ceil(THUMB_RADIUS_DRAGGED * 2), super.getSuggestedMinimumWidth());
+    }
 
-        if (!changed)
-            return;
+    @Override
+    protected int getSuggestedMinimumHeight() {
+        return Math.max((int) Math.ceil(THUMB_RADIUS_DRAGGED * 2), super.getSuggestedMinimumHeight());
+    }
 
-        if (getWidth() == 0 || getHeight() == 0)
-            return;
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int desiredWidth = getSuggestedMinimumWidth();
+        int desiredHeight = getSuggestedMinimumHeight();
 
-        if (rippleDrawable != null)
-            rippleDrawable.setBounds(0, 0, getWidth(), getHeight());
+        int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+        int widthSize = MeasureSpec.getSize(widthMeasureSpec);
+        int heightMode = MeasureSpec.getMode(heightMeasureSpec);
+        int heightSize = MeasureSpec.getSize(heightMeasureSpec);
+
+        int width;
+        int height;
+
+        //Measure Width
+        if (widthMode == MeasureSpec.EXACTLY) {
+            width = widthSize;
+        } else if (widthMode == MeasureSpec.AT_MOST) {
+            width = Math.min(desiredWidth, widthSize);
+        } else {
+            width = desiredWidth;
+        }
+
+        if (heightMode == MeasureSpec.EXACTLY) {
+            height = heightSize;
+        } else if (heightMode == MeasureSpec.AT_MOST) {
+            height = Math.min(desiredHeight, heightSize);
+        } else {
+            height = desiredHeight;
+        }
+
+        setMeasuredDimension(width, height);
     }
 
     @Override
     public void draw(@NonNull Canvas canvas) {
         super.draw(canvas);
 
+        boolean ltr = ViewCompat.getLayoutDirection(this) == ViewCompat.LAYOUT_DIRECTION_LTR;
+
         float v = (value - min) / (max - min);
+        if (!ltr)
+            v = 1 - v;
         float v2 = (value2 - min) / (max - min);
+        if (!ltr)
+            v2 = 1 - v2;
         int thumbX = (int) (v * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
         int thumbY = getHeight() / 2;
         int thumbX2 = (int) (v2 * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
@@ -158,26 +172,32 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
         paint.setStrokeWidth(STROKE_WIDTH);
 
         paint.setColor(colorControl);
-        if (getPaddingLeft() + thumbRadius < thumbX - thumbRadius)
-            canvas.drawLine(getPaddingLeft(), thumbY, thumbX - thumbRadius, thumbY, paint);
-        if (thumbX2 + thumbRadius2 < getWidth() - getPaddingLeft() - thumbRadius2)
-            canvas.drawLine(thumbX2 + thumbRadius2, thumbY, getWidth() - getPaddingLeft(), thumbY, paint);
+        if (ltr) {
+            if (getPaddingLeft() + thumbRadius < thumbX - thumbRadius)
+                canvas.drawLine(getPaddingLeft(), thumbY, thumbX - thumbRadius, thumbY, paint);
+            if (thumbX2 + thumbRadius2 < getWidth() - getPaddingRight() - thumbRadius2)
+                canvas.drawLine(thumbX2 + thumbRadius2, thumbY, getWidth() - getPaddingRight(), thumbY, paint);
+        } else {
+            if (getPaddingLeft() + thumbRadius2 < thumbX2 - thumbRadius2)
+                canvas.drawLine(getPaddingLeft(), thumbY, thumbX2 - thumbRadius2, thumbY, paint);
+            if (thumbX + thumbRadius < getWidth() - getPaddingRight() - thumbRadius)
+                canvas.drawLine(thumbX + thumbRadius, thumbY, getWidth() - getPaddingRight(), thumbY, paint);
+        }
 
         if (!isInEditMode())
-            paint.setColor(tint.getColorForState(getDrawableState(), tint.getDefaultColor()));
-        if (thumbX + thumbRadius2 < thumbX2 - thumbRadius)
-            canvas.drawLine(thumbX + thumbRadius, thumbY, thumbX2 - thumbRadius2, thumbY, paint);
+            paint.setColor(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
+        canvas.drawLine(thumbX + thumbRadius, thumbY, thumbX2 - thumbRadius2, thumbY, paint);
 
         if (style == Style.Discrete && tick) {
             paint.setColor(tickColor);
             float range = (max - min) / step;
             for (int i = 0; i < range; i += tickStep)
-                canvas.drawCircle(i / range * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft(), getHeight() / 2, STROKE_WIDTH / 2, paint);
-            canvas.drawCircle(getWidth() - getPaddingRight(), getHeight() / 2, STROKE_WIDTH / 2, paint);
+                canvas.drawCircle(i / range * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft(), getHeight() / 2.0f, STROKE_WIDTH / 2, paint);
+            canvas.drawCircle(getWidth() - getPaddingRight(), getHeight() / 2.0f, STROKE_WIDTH / 2, paint);
         }
 
         if (!isInEditMode())
-            paint.setColor(tint.getColorForState(getDrawableState(), tint.getDefaultColor()));
+            paint.setColor(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
         canvas.drawCircle(thumbX, thumbY, thumbRadius, paint);
         canvas.drawCircle(thumbX2, thumbY, thumbRadius2, paint);
 
@@ -316,30 +336,34 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
     // ripple
     // -------------------------------
 
-    private RippleDrawable rippleDrawable;
-    private EmptyDrawable emptyBackground = new EmptyDrawable();
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (!isEnabled())
+            return false;
+
+        boolean ltr = ViewCompat.getLayoutDirection(this) == ViewCompat.LAYOUT_DIRECTION_LTR;
         float v = (value - min) / (max - min);
         float v2 = (value2 - min) / (max - min);
 
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
             int thumbX = (int) (v * (getWidth() - getPaddingLeft() - getPaddingRight() - thumbRadius * 2) + getPaddingLeft() + thumbRadius);
             int thumbX2 = (int) (v2 * (getWidth() - getPaddingLeft() - getPaddingRight() - thumbRadius2 * 2) + getPaddingLeft() + thumbRadius2);
+            if (!ltr) {
+                int swap = thumbX2;
+                thumbX2 = thumbX;
+                thumbX = swap;
+            }
             if (Math.abs(event.getX() - thumbX) < Math.abs(event.getX() - thumbX2)) {
                 draggedThumb = 1;
+                Log.e("seekbar", "dragged thumb 1");
                 if (radiusAnimator != null)
                     radiusAnimator.end();
                 radiusAnimator = ValueAnimator.ofFloat(thumbRadius, THUMB_RADIUS_DRAGGED);
                 radiusAnimator.setDuration(200);
                 radiusAnimator.setInterpolator(interpolator);
-                radiusAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                    @Override
-                    public void onAnimationUpdate(ValueAnimator animation) {
-                        thumbRadius = (float) animation.getAnimatedValue();
-                        postInvalidate();
-                    }
+                radiusAnimator.addUpdateListener(animation -> {
+                    thumbRadius = (float) animation.getAnimatedValue();
+                    postInvalidate();
                 });
                 radiusAnimator.addListener(new AnimatorListenerAdapter() {
                     @Override
@@ -350,17 +374,15 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
                 radiusAnimator.start();
             } else {
                 draggedThumb = 2;
+                Log.e("seekbar", "dragged thumb 2");
                 if (radiusAnimator != null)
                     radiusAnimator.end();
                 radiusAnimator = ValueAnimator.ofFloat(thumbRadius2, THUMB_RADIUS_DRAGGED);
                 radiusAnimator.setDuration(200);
                 radiusAnimator.setInterpolator(interpolator);
-                radiusAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                    @Override
-                    public void onAnimationUpdate(ValueAnimator animation) {
-                        thumbRadius2 = (float) animation.getAnimatedValue();
-                        postInvalidate();
-                    }
+                radiusAnimator.addUpdateListener(animation -> {
+                    thumbRadius2 = (float) animation.getAnimatedValue();
+                    postInvalidate();
                 });
                 radiusAnimator.addListener(new AnimatorListenerAdapter() {
                     @Override
@@ -384,16 +406,19 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
                     valueAnimator = ValueAnimator.ofFloat(value, val);
                     valueAnimator.setDuration(200);
                     valueAnimator.setInterpolator(interpolator);
-                    valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                        @Override
-                        public void onAnimationUpdate(ValueAnimator animation) {
-                            value = (float) animation.getAnimatedValue();
-                            int thumbX = (int) ((value - min) / (max - min) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
-                            int thumbY = getHeight() / 2;
-                            int radius = rippleDrawable.getRadius();
-                            rippleDrawable.setBounds(thumbX - radius, thumbY - radius, thumbX + radius, thumbY + radius);
-                            postInvalidate();
+                    valueAnimator.addUpdateListener(animation -> {
+                        value = (float) animation.getAnimatedValue();
+                        float vNorm = (value - min) / (max - min);
+                        int thumbX;
+                        if (ltr) {
+                            thumbX = (int) (vNorm * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+                        } else {
+                            thumbX = (int) ((1 - vNorm) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
                         }
+                        int thumbY = getHeight() / 2;
+                        int radius = rippleDrawable.getRadius();
+                        rippleDrawable.setBounds(thumbX - radius, thumbY - radius, thumbX + radius, thumbY + radius);
+                        postInvalidate();
                     });
                     valueAnimator.start();
                 }
@@ -402,12 +427,9 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
                 radiusAnimator = ValueAnimator.ofFloat(thumbRadius, THUMB_RADIUS);
                 radiusAnimator.setDuration(200);
                 radiusAnimator.setInterpolator(interpolator);
-                radiusAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                    @Override
-                    public void onAnimationUpdate(ValueAnimator animation) {
-                        thumbRadius = (float) animation.getAnimatedValue();
-                        postInvalidate();
-                    }
+                radiusAnimator.addUpdateListener(animation -> {
+                    thumbRadius = (float) animation.getAnimatedValue();
+                    postInvalidate();
                 });
                 radiusAnimator.start();
             } else {
@@ -418,16 +440,19 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
                     valueAnimator = ValueAnimator.ofFloat(value2, val2);
                     valueAnimator.setDuration(200);
                     valueAnimator.setInterpolator(interpolator);
-                    valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                        @Override
-                        public void onAnimationUpdate(ValueAnimator animation) {
-                            value2 = (float) animation.getAnimatedValue();
-                            int thumbX = (int) ((value2 - min) / (max - min) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
-                            int thumbY = getHeight() / 2;
-                            int radius = rippleDrawable.getRadius();
-                            rippleDrawable.setBounds(thumbX - radius, thumbY - radius, thumbX + radius, thumbY + radius);
-                            postInvalidate();
+                    valueAnimator.addUpdateListener(animation -> {
+                        value2 = (float) animation.getAnimatedValue();
+                        float vNorm = (value2 - min) / (max - min);
+                        int thumbX;
+                        if (ltr) {
+                            thumbX = (int) (vNorm * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+                        } else {
+                            thumbX = (int) ((1 - vNorm) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
                         }
+                        int thumbY = getHeight() / 2;
+                        int radius = rippleDrawable.getRadius();
+                        rippleDrawable.setBounds(thumbX - radius, thumbY - radius, thumbX + radius, thumbY + radius);
+                        postInvalidate();
                     });
                     valueAnimator.start();
                 }
@@ -436,12 +461,9 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
                 radiusAnimator = ValueAnimator.ofFloat(thumbRadius2, THUMB_RADIUS);
                 radiusAnimator.setDuration(200);
                 radiusAnimator.setInterpolator(interpolator);
-                radiusAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                    @Override
-                    public void onAnimationUpdate(ValueAnimator animation) {
-                        thumbRadius2 = (float) animation.getAnimatedValue();
-                        postInvalidate();
-                    }
+                radiusAnimator.addUpdateListener(animation -> {
+                    thumbRadius2 = (float) animation.getAnimatedValue();
+                    postInvalidate();
                 });
                 radiusAnimator.start();
             }
@@ -456,9 +478,13 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
         if (draggedThumb == 1) {
             v = (event.getX() - getPaddingLeft()) / (getWidth() - getPaddingLeft() - getPaddingRight());
             v = Math.max(0, Math.min(v, 1));
+            if (!ltr)
+                v = 1 - v;
         } else if (draggedThumb == 2) {
             v2 = (event.getX() - getPaddingLeft()) / (getWidth() - getPaddingLeft() - getPaddingRight());
             v2 = Math.max(0, Math.min(v2, 1));
+            if (!ltr)
+                v2 = 1 - v2;
         }
 
         if (v > v2) {
@@ -475,16 +501,24 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
 
         int thumbX = 0;
         if (draggedThumb == 1) {
-            thumbX = (int) (v * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            if (ltr) {
+                thumbX = (int) (v * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            } else {
+                thumbX = (int) ((1 - v) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            }
         } else if (draggedThumb == 2) {
-            thumbX = (int) (v2 * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            if (ltr) {
+                thumbX = (int) (v2 * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            } else {
+                thumbX = (int) ((1 - v2) * (getWidth() - getPaddingLeft() - getPaddingRight()) + getPaddingLeft());
+            }
         }
         int thumbY = getHeight() / 2;
         int radius = rippleDrawable.getRadius();
 
         if (showLabel && draggedThumb > 0) {
             int[] location = new int[2];
-            getLocationOnScreen(location);
+            getLocationInWindow(location);
             popup.setText(String.format(labelFormat, draggedThumb == 1 ? newValue : newValue2));
             popup.update(thumbX + location[0] - popup.getBubbleWidth() / 2, thumbY - radius + location[1] - popup.getHeight());
         }
@@ -511,478 +545,4 @@ public class RangeSeekBar extends View implements RippleView, StateAnimatorView,
         return true;
     }
 
-    @Override
-    public RippleDrawable getRippleDrawable() {
-        return rippleDrawable;
-    }
-
-    public void setRippleDrawable(RippleDrawable newRipple) {
-        if (rippleDrawable != null) {
-            rippleDrawable.setCallback(null);
-            if (rippleDrawable.getStyle() == RippleDrawable.Style.Background)
-                super.setBackgroundDrawable(rippleDrawable.getBackground() == null ? emptyBackground : rippleDrawable.getBackground());
-        }
-
-        if (newRipple != null) {
-            newRipple.setCallback(this);
-            newRipple.setBounds(0, 0, getWidth(), getHeight());
-            if (newRipple.getStyle() == RippleDrawable.Style.Background)
-                super.setBackgroundDrawable((Drawable) newRipple);
-        }
-
-        rippleDrawable = newRipple;
-    }
-
-    @Override
-    protected boolean verifyDrawable(Drawable who) {
-        return super.verifyDrawable(who) || rippleDrawable == who;
-    }
-
-    @Override
-    public void invalidateDrawable(@NonNull Drawable drawable) {
-        super.invalidateDrawable(drawable);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate();
-    }
-
-    @Override
-    public void invalidate(@NonNull Rect dirty) {
-        super.invalidate(dirty);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(dirty);
-    }
-
-    @Override
-    public void invalidate(int l, int t, int r, int b) {
-        super.invalidate(l, t, r, b);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate(l, t, r, b);
-    }
-
-    @Override
-    public void invalidate() {
-        super.invalidate();
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).invalidate();
-    }
-
-    @Override
-    public void postInvalidateDelayed(long delayMilliseconds) {
-        super.postInvalidateDelayed(delayMilliseconds);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
-    }
-
-    @Override
-    public void postInvalidateDelayed(long delayMilliseconds, int left, int top, int right, int bottom) {
-        super.postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
-    }
-
-    @Override
-    public void postInvalidate() {
-        super.postInvalidate();
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate();
-    }
-
-    @Override
-    public void postInvalidate(int left, int top, int right, int bottom) {
-        super.postInvalidate(left, top, right, bottom);
-        if (getParent() == null || !(getParent() instanceof View))
-            return;
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
-            ((View) getParent()).postInvalidate(left, top, right, bottom);
-    }
-
-    @Override
-    public void setBackground(Drawable background) {
-        setBackgroundDrawable(background);
-    }
-
-    @Override
-    public void setBackgroundDrawable(Drawable background) {
-        if (background instanceof RippleDrawable) {
-            setRippleDrawable((RippleDrawable) background);
-            return;
-        }
-
-        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Background) {
-            rippleDrawable.setCallback(null);
-            rippleDrawable = null;
-        }
-        super.setBackgroundDrawable(background == null ? emptyBackground : background);
-    }
-
-
-    // -------------------------------
-    // state animators
-    // -------------------------------
-
-    private StateAnimator stateAnimator = new StateAnimator(this);
-
-    @Override
-    public StateAnimator getStateAnimator() {
-        return stateAnimator;
-    }
-
-    @Override
-    protected void drawableStateChanged() {
-        super.drawableStateChanged();
-        if (rippleDrawable != null && rippleDrawable.getStyle() != RippleDrawable.Style.Background)
-            rippleDrawable.setState(getDrawableState());
-        if (stateAnimator != null)
-            stateAnimator.setState(getDrawableState());
-    }
-
-
-    // -------------------------------
-    // animations
-    // -------------------------------
-
-    private AnimUtils.Style inAnim = AnimUtils.Style.None, outAnim = AnimUtils.Style.None;
-    private Animator animator;
-
-    public void setVisibility(final int visibility) {
-        if (visibility == View.VISIBLE && (getVisibility() != View.VISIBLE || animator != null)) {
-            if (animator != null)
-                animator.cancel();
-            if (inAnim != AnimUtils.Style.None) {
-                animator = AnimUtils.animateIn(this, inAnim, new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator a) {
-                        animator = null;
-                        clearAnimation();
-                    }
-                });
-            }
-            super.setVisibility(visibility);
-        } else if (visibility != View.VISIBLE && (getVisibility() == View.VISIBLE || animator != null)) {
-            if (animator != null)
-                animator.cancel();
-            if (outAnim == AnimUtils.Style.None) {
-                super.setVisibility(visibility);
-                return;
-            }
-            animator = AnimUtils.animateOut(this, outAnim, new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator a) {
-                    if (((ValueAnimator) a).getAnimatedFraction() == 1)
-                        RangeSeekBar.super.setVisibility(visibility);
-                    animator = null;
-                    clearAnimation();
-                }
-            });
-        }
-    }
-
-    public void setVisibilityImmediate(final int visibility) {
-        super.setVisibility(visibility);
-    }
-
-    public Animator getAnimator() {
-        return animator;
-    }
-
-    public AnimUtils.Style getOutAnimation() {
-        return outAnim;
-    }
-
-    public void setOutAnimation(AnimUtils.Style outAnim) {
-        this.outAnim = outAnim;
-    }
-
-    public AnimUtils.Style getInAnimation() {
-        return inAnim;
-    }
-
-    public void setInAnimation(AnimUtils.Style inAnim) {
-        this.inAnim = inAnim;
-    }
-
-
-    // -------------------------------
-    // tint
-    // -------------------------------
-
-    ColorStateList tint;
-    PorterDuff.Mode tintMode;
-    ColorStateList backgroundTint;
-    PorterDuff.Mode backgroundTintMode;
-    boolean animateColorChanges;
-    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateTint();
-            ViewCompat.postInvalidateOnAnimation(RangeSeekBar.this);
-        }
-    };
-    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateBackgroundTint();
-            ViewCompat.postInvalidateOnAnimation(RangeSeekBar.this);
-        }
-    };
-
-    @Override
-    public void setTint(ColorStateList list) {
-        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
-        updateTint();
-    }
-
-    @Override
-    public void setTint(int color) {
-        if (color == 0) {
-            setTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
-    }
-
-    @Override
-    public ColorStateList getTint() {
-        return tint;
-    }
-
-    private void updateTint() {
-        postInvalidate();
-    }
-
-    @Override
-    public void setTintMode(@NonNull PorterDuff.Mode mode) {
-        this.tintMode = mode;
-        updateTint();
-    }
-
-    @Override
-    public PorterDuff.Mode getTintMode() {
-        return tintMode;
-    }
-
-    @Override
-    public void setBackgroundTint(ColorStateList list) {
-        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
-        updateBackgroundTint();
-    }
-
-    @Override
-    public void setBackgroundTint(int color) {
-        if (color == 0) {
-            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setBackgroundTint(ColorStateList.valueOf(color));
-        }
-    }
-
-    @Override
-    public ColorStateList getBackgroundTint() {
-        return backgroundTint;
-    }
-
-    private void updateBackgroundTint() {
-        if (getBackground() == null)
-            return;
-        if (backgroundTint != null && backgroundTintMode != null) {
-            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
-            getBackground().setColorFilter(new PorterDuffColorFilter(color, tintMode));
-        } else {
-            getBackground().setColorFilter(null);
-        }
-    }
-
-    @Override
-    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
-        this.backgroundTintMode = mode;
-        updateBackgroundTint();
-    }
-
-    @Override
-    public PorterDuff.Mode getBackgroundTintMode() {
-        return backgroundTintMode;
-    }
-
-    public boolean isAnimateColorChangesEnabled() {
-        return animateColorChanges;
-    }
-
-    public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
-        this.animateColorChanges = animateColorChanges;
-        if (tint != null && !(tint instanceof AnimatedColorStateList))
-            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
-        if (backgroundTint!= null && !(backgroundTint instanceof AnimatedColorStateList))
-            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
-    }
-
-
-    // -------------------------------
-    // transformations
-    // -------------------------------
-
-    public float getAlpha() {
-        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
-    }
-
-    public void setAlpha(float alpha) {
-        if (NEEDS_PROXY) {
-            wrap(this).setAlpha(alpha);
-        } else {
-            super.setAlpha(alpha);
-        }
-    }
-
-    public float getPivotX() {
-        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
-    }
-
-    public void setPivotX(float pivotX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotX(pivotX);
-        } else {
-            super.setPivotX(pivotX);
-        }
-    }
-
-    public float getPivotY() {
-        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
-    }
-
-    public void setPivotY(float pivotY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotY(pivotY);
-        } else {
-            super.setPivotY(pivotY);
-        }
-    }
-
-    public float getRotation() {
-        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
-    }
-
-    public void setRotation(float rotation) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotation(rotation);
-        } else {
-            super.setRotation(rotation);
-        }
-    }
-
-    public float getRotationX() {
-        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
-    }
-
-    public void setRotationX(float rotationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationX(rotationX);
-        } else {
-            super.setRotationX(rotationX);
-        }
-    }
-
-    public float getRotationY() {
-        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
-    }
-
-    public void setRotationY(float rotationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationY(rotationY);
-        } else {
-            super.setRotationY(rotationY);
-        }
-    }
-
-    public float getScaleX() {
-        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
-    }
-
-    public void setScaleX(float scaleX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleX(scaleX);
-        } else {
-            super.setScaleX(scaleX);
-        }
-    }
-
-    public float getScaleY() {
-        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
-    }
-
-    public void setScaleY(float scaleY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleY(scaleY);
-        } else {
-            super.setScaleY(scaleY);
-        }
-    }
-
-    public float getTranslationX() {
-        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
-    }
-
-    public void setTranslationX(float translationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationX(translationX);
-        } else {
-            super.setTranslationX(translationX);
-        }
-    }
-
-    public float getTranslationY() {
-        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
-    }
-
-    public void setTranslationY(float translationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationY(translationY);
-        } else {
-            super.setTranslationY(translationY);
-        }
-    }
-
-    public float getX() {
-        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
-    }
-
-    public void setX(float x) {
-        if (NEEDS_PROXY) {
-            wrap(this).setX(x);
-        } else {
-            super.setX(x);
-        }
-    }
-
-    public float getY() {
-        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
-    }
-
-    public void setY(float y) {
-        if (NEEDS_PROXY) {
-            wrap(this).setY(y);
-        } else {
-            super.setY(y);
-        }
-    }
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="data"
+            type="String" />
+    </data>
+
+    <carbon.widget.TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        android:paddingStart="@dimen/carbon_contentSpace"
+        android:paddingLeft="@dimen/carbon_contentSpace"
+        android:paddingTop="@dimen/carbon_padding"
+        android:paddingEnd="@dimen/carbon_windowPadding"
+        android:paddingRight="@dimen/carbon_windowPadding"
+        android:paddingBottom="@dimen/carbon_padding"
+        android:text="@{data}"
+        android:textAppearance="?attr/carbon_textAppearanceCaption"
+        tools:text="description" />
+</layout>

@@ -1,27 +1,26 @@
 package carbon.beta;
 
+import android.annotation.TargetApi;
 import android.content.Context;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.AttrRes;
+import androidx.annotation.StyleRes;
+
 import carbon.R;
-import carbon.widget.FrameLayout;
+import carbon.widget.DropDown;
 import carbon.widget.LinearLayout;
-import carbon.widget.Spinner;
 import carbon.widget.TableView;
 import carbon.widget.TextView;
-import carbon.widget.Toolbar;
 
-/**
- * Created by Marcin on 2015-12-18.
- */
-public class TableLayout extends FrameLayout {
+public class TableLayout extends LinearLayout {
     private TableView table;
-    Toolbar toolbar;
     LinearLayout header;
     View footer;
-    Spinner rowNumber;
+    DropDown rowNumber;
     private TextView pageNumbers;
 
     public TableLayout(Context context) {
@@ -34,28 +33,31 @@ public class TableLayout extends FrameLayout {
         initTableLayout();
     }
 
-    public TableLayout(Context context, AttributeSet attrs, int defStyleAttr) {
+    public TableLayout(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        initTableLayout();
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public TableLayout(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
         initTableLayout();
     }
 
     private void initTableLayout() {
         View.inflate(getContext(), R.layout.carbon_tablelayout, this);
-        toolbar = (Toolbar) findViewById(R.id.carbon_tableToolbar);
-        header = (LinearLayout) findViewById(R.id.carbon_tableHeader);
-        table = (TableView) findViewById(R.id.carbon_table);
+        setOrientation(VERTICAL);
+
+        header = findViewById(R.id.carbon_tableHeader);
+        table = findViewById(R.id.carbon_table);
         footer = findViewById(R.id.carbon_tableFooter);
-        rowNumber = (Spinner) findViewById(R.id.carbon_tableRowNumber);
+        rowNumber = findViewById(R.id.carbon_tableRowNumber);
         rowNumber.setItems(new String[]{"10", "20", "50"});
-        pageNumbers = (TextView) findViewById(R.id.carbon_tablePageNumbers);
+        pageNumbers = findViewById(R.id.carbon_tablePageNumbers);
     }
 
     public TableView getTableView() {
         return table;
-    }
-
-    public Toolbar getToolbar() {
-        return toolbar;
     }
 
     public View getHeader() {
@@ -71,7 +73,7 @@ public class TableLayout extends FrameLayout {
         header.removeAllViews();
         for (int i = 0; i < adapter.getColumnCount(); i++) {
             View headerCell = View.inflate(getContext(), R.layout.carbon_tablelayout_header, null);
-            TextView tv = (TextView) headerCell.findViewById(R.id.carbon_tableHeaderText);
+            TextView tv = headerCell.findViewById(R.id.carbon_tableHeaderText);
             tv.setText(adapter.getColumnName(i));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, adapter.getColumnWeight(i));
             header.addView(headerCell, params);

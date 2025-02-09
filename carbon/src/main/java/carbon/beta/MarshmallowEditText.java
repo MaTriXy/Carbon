@@ -1,12 +1,9 @@
 package carbon.beta;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.NonNull;
-import android.support.v7.view.ContextThemeWrapper;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.ActionMode;
@@ -19,17 +16,17 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.PopupWindow;
 
+import androidx.annotation.AttrRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StyleRes;
+import androidx.appcompat.view.ContextThemeWrapper;
+
 import java.lang.reflect.Field;
 
-import carbon.Carbon;
 import carbon.R;
-import carbon.drawable.VectorDrawable;
 import carbon.internal.EditTextMenu;
 import carbon.widget.EditText;
 
-/**
- * Created by Marcin on 2016-04-26.
- */
 public class MarshmallowEditText extends EditText {
     private static final int ID_CUT = android.R.id.cut;
     private static final int ID_COPY = android.R.id.copy;
@@ -52,7 +49,7 @@ public class MarshmallowEditText extends EditText {
         initActionModeCallback();
     }
 
-    public MarshmallowEditText(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public MarshmallowEditText(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         initActionModeCallback();
     }
@@ -144,7 +141,6 @@ public class MarshmallowEditText extends EditText {
     }
 
     @Override
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public ActionMode startActionMode(final ActionMode.Callback callback) {
         ActionMode.Callback c = new ActionMode.Callback() {
 
@@ -170,7 +166,6 @@ public class MarshmallowEditText extends EditText {
     }
 
     @Override
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public ActionMode startActionMode(final ActionMode.Callback callback, int type) {
         ActionMode.Callback c = new ActionMode.Callback() {
 
@@ -200,26 +195,25 @@ public class MarshmallowEditText extends EditText {
     }
 
     private void initActionModeCallback() {
-        if (android.os.Build.VERSION.SDK_INT >= 11) {
-            setCustomSelectionActionModeCallback(new ActionMode.Callback() {
+        setCustomSelectionActionModeCallback(new ActionMode.Callback() {
 
-                public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                    return false;
-                }
+            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+                return false;
+            }
 
-                public void onDestroyActionMode(ActionMode mode) {
-                }
+            public void onDestroyActionMode(ActionMode mode) {
+            }
 
-                public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                    createMenu(menu);
-                    return true;
-                }
+            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+                createMenu(menu);
+                return true;
+            }
 
-                public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                    return false;
-                }
-            });
-        }
+            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+                return false;
+            }
+        });
+
         if (Build.VERSION.SDK_INT >= 23) {
             setCustomInsertionActionModeCallback(new ActionMode.Callback() {
                 @Override

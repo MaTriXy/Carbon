@@ -11,9 +11,6 @@ import carbon.widget.RecyclerView;
 import carbon.widget.TextView;
 import tk.zielony.carbonsamples.R;
 
-/**
- * Created by Marcin on 2015-05-09.
- */
 public class ExpandableFruitAdapter extends ExpandableRecyclerView.Adapter<ExpandableFruitAdapter.ChildViewHolder, ExpandableRecyclerView.SimpleGroupViewHolder, String, String> {
     private List<String> fruits;
 
@@ -62,15 +59,13 @@ public class ExpandableFruitAdapter extends ExpandableRecyclerView.Adapter<Expan
     @Override
     public void onBindGroupViewHolder(ExpandableRecyclerView.SimpleGroupViewHolder holder, int group) {
         super.onBindGroupViewHolder(holder, group);
-        ExpandableRecyclerView.SimpleGroupViewHolder h = holder;
-        h.setText(getGroupItem(group));
+        holder.setText(getGroupItem(group));
     }
 
     @Override
     public void onBindChildViewHolder(ExpandableFruitAdapter.ChildViewHolder holder, int group, final int position) {
         super.onBindChildViewHolder(holder, group, position);
-        ChildViewHolder h = holder;
-        h.tv.setText(getChildItem(group, position));
+        holder.tv.setText(getChildItem(group, position));
     }
 
     public class ChildViewHolder extends RecyclerView.ViewHolder {
@@ -78,7 +73,7 @@ public class ExpandableFruitAdapter extends ExpandableRecyclerView.Adapter<Expan
 
         public ChildViewHolder(View itemView) {
             super(itemView);
-            tv = (TextView) itemView.findViewById(R.id.text);
+            tv = itemView.findViewById(R.id.text);
         }
     }
 

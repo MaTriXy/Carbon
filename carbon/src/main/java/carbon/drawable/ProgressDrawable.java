@@ -8,29 +8,27 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
 
-import carbon.widget.ProgressBar;
+import androidx.annotation.NonNull;
 
-/**
- * Created by Marcin on 2015-02-28.
- */
+import carbon.widget.ProgressView;
+
 public abstract class ProgressDrawable extends Drawable {
-    static final long DEFAULT_SWEEP_DURATION = 800;
-    static final long DEFAULT_SWEEP_OFFSET = 500;
-    long sweepDuration = DEFAULT_SWEEP_DURATION;
-    long sweepDelay = DEFAULT_SWEEP_OFFSET;
+    private static final long DEFAULT_SWEEP_DURATION = 800;
+    private static final long DEFAULT_SWEEP_OFFSET = 500;
+    private long sweepDuration = DEFAULT_SWEEP_DURATION;
+    private long sweepDelay = DEFAULT_SWEEP_OFFSET;
     final long startTime = System.currentTimeMillis();
 
     Paint forePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    ColorStateList tint = ColorStateList.valueOf(Color.RED);
-    PorterDuff.Mode tintMode;
+    private ColorStateList tint = ColorStateList.valueOf(Color.RED);
+    private PorterDuff.Mode tintMode;
 
     float width = 5;
     float progress;
     float barPadding;
 
-    ProgressBar.Style style;
+    ProgressView.Style style;
 
     @Override
     public void setAlpha(int alpha) {
@@ -48,9 +46,8 @@ public abstract class ProgressDrawable extends Drawable {
     }
 
     @Override
-    public boolean setState(int[] stateSet) {
-        boolean result = super.setState(stateSet);
-        return result;
+    public boolean setState(@NonNull int[] stateSet) {
+        return super.setState(stateSet);
     }
 
     public void setProgress(float progress) {
@@ -85,27 +82,12 @@ public abstract class ProgressDrawable extends Drawable {
         this.width = width;
     }
 
-    public ProgressBar.Style getStyle() {
+    public ProgressView.Style getStyle() {
         return style;
     }
 
-    public void setStyle(ProgressBar.Style style) {
+    public void setStyle(ProgressView.Style style) {
         this.style = style;
-    }
-
-    @Deprecated
-    public ColorStateList getBarColor() {
-        return tint;
-    }
-
-    @Deprecated
-    public void setBarColor(int color) {
-        tint = ColorStateList.valueOf(color);
-    }
-
-    @Deprecated
-    public void setBarColor(ColorStateList barColor) {
-        this.tint = barColor;
     }
 
     public float getBarPadding() {
@@ -116,14 +98,15 @@ public abstract class ProgressDrawable extends Drawable {
         this.barPadding = barPadding;
     }
 
-    public void setTint(ColorStateList list) {
-        tint = list;
+    @Override
+    public void setTintList(ColorStateList list) {
+        this.tint = list;
         updateTint();
     }
 
     @Override
     public void setTint(int tintColor) {
-        this.tint = ColorStateList.valueOf(tintColor);
+        setTintList(ColorStateList.valueOf(tintColor));
     }
 
     @Override

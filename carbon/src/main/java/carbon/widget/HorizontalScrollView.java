@@ -1,5 +1,6 @@
 package carbon.widget;
 
+import android.animation.ValueAnimator;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -10,32 +11,25 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
-import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
 
-import com.nineoldandroids.animation.ValueAnimator;
-
-import java.lang.reflect.Field;
+import androidx.annotation.AttrRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.StyleRes;
+import androidx.core.view.ViewCompat;
 
 import carbon.Carbon;
 import carbon.R;
 import carbon.animation.AnimatedColorStateList;
-import carbon.drawable.DefaultPrimaryColorStateList;
 import carbon.drawable.EdgeEffect;
-import carbon.drawable.RectDrawable;
+import carbon.view.MarginView;
+import carbon.view.TintedView;
+import carbon.view.VisibleView;
 
-import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
-import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
-
-/**
- * Created by Marcin on 2015-02-28.
- */
-public class HorizontalScrollView extends android.widget.HorizontalScrollView implements TintedView {
+public class HorizontalScrollView extends android.widget.HorizontalScrollView implements TintedView, VisibleView, MarginView {
     private int mTouchSlop;
     EdgeEffect leftGlow;
     EdgeEffect rightGlow;
@@ -50,41 +44,51 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
 
     public HorizontalScrollView(Context context) {
         super(context);
-        initHorizontalScrollView(null, android.R.attr.horizontalScrollViewStyle);
+        initHorizontalScrollView(null, android.R.attr.horizontalScrollViewStyle, R.style.carbon_HorizontalScrollView);
     }
 
     public HorizontalScrollView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        initHorizontalScrollView(attrs, android.R.attr.horizontalScrollViewStyle);
+        initHorizontalScrollView(attrs, android.R.attr.horizontalScrollViewStyle, R.style.carbon_HorizontalScrollView);
     }
 
-    public HorizontalScrollView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public HorizontalScrollView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initHorizontalScrollView(attrs, defStyleAttr);
+        initHorizontalScrollView(attrs, defStyleAttr, R.style.carbon_HorizontalScrollView);
     }
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public HorizontalScrollView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    public HorizontalScrollView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        initHorizontalScrollView(attrs, defStyleAttr);
+        initHorizontalScrollView(attrs, defStyleAttr, defStyleRes);
     }
 
-    private void initHorizontalScrollView(AttributeSet attrs, int defStyleAttr) {
+    private static int[] tintIds = new int[]{
+            R.styleable.HorizontalScrollView_carbon_tint,
+            R.styleable.HorizontalScrollView_carbon_tintMode,
+            R.styleable.HorizontalScrollView_carbon_backgroundTint,
+            R.styleable.HorizontalScrollView_carbon_backgroundTintMode,
+            R.styleable.HorizontalScrollView_carbon_animateColorChanges
+    };
+
+    private void initHorizontalScrollView(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
         final ViewConfiguration configuration = ViewConfiguration.get(getContext());
         mTouchSlop = configuration.getScaledTouchSlop();
 
-        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.HorizontalScrollView, defStyleAttr, 0);
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.HorizontalScrollView, defStyleAttr, defStyleRes);
+
         for (int i = 0; i < a.getIndexCount(); i++) {
             int attr = a.getIndex(i);
             if (attr == R.styleable.HorizontalScrollView_carbon_overScroll) {
                 setOverScrollMode(a.getInt(attr, OVER_SCROLL_ALWAYS));
             }
         }
+
+        Carbon.initTint(this, a, tintIds);
+
         a.recycle();
 
-        Carbon.initTint(this, attrs, defStyleAttr);
-
-        initScrollbars();
+        setWillNotDraw(false);
     }
 
     @Override
@@ -212,11 +216,7 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
             leftGlow = null;
             rightGlow = null;
         }
-        try {
-            super.setOverScrollMode(OVER_SCROLL_NEVER);
-        } catch (Exception e) {
-            // Froyo
-        }
+        super.setOverScrollMode(OVER_SCROLL_NEVER);
         this.overscrollMode = mode;
     }
 
@@ -236,34 +236,24 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
     ColorStateList backgroundTint;
     PorterDuff.Mode backgroundTintMode;
     boolean animateColorChanges;
-    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateTint();
-            ViewCompat.postInvalidateOnAnimation(HorizontalScrollView.this);
-        }
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = animation -> {
+        updateTint();
+        ViewCompat.postInvalidateOnAnimation(this);
     };
-    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateBackgroundTint();
-            ViewCompat.postInvalidateOnAnimation(HorizontalScrollView.this);
-        }
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = animation -> {
+        updateBackgroundTint();
+        ViewCompat.postInvalidateOnAnimation(this);
     };
 
     @Override
-    public void setTint(ColorStateList list) {
-        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
+    public void setTintList(ColorStateList list) {
+        this.tint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
         updateTint();
     }
 
     @Override
     public void setTint(int color) {
-        if (color == 0) {
-            setTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
+        setTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -279,7 +269,6 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
             leftGlow.setColor(color);
         if (rightGlow != null)
             rightGlow.setColor(color);
-        scrollBarDrawable = null;
     }
 
     @Override
@@ -294,18 +283,14 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
     }
 
     @Override
-    public void setBackgroundTint(ColorStateList list) {
-        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+    public void setBackgroundTintList(ColorStateList list) {
+        this.backgroundTint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
         updateBackgroundTint();
     }
 
     @Override
     public void setBackgroundTint(int color) {
-        if (color == 0) {
-            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setBackgroundTint(ColorStateList.valueOf(color));
-        }
+        setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -325,7 +310,7 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
     }
 
     @Override
-    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+    public void setBackgroundTintMode(PorterDuff.Mode mode) {
         this.backgroundTintMode = mode;
         updateBackgroundTint();
     }
@@ -340,11 +325,11 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
     }
 
     public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        if (this.animateColorChanges == animateColorChanges)
+            return;
         this.animateColorChanges = animateColorChanges;
-        if (tint != null && !(tint instanceof AnimatedColorStateList))
-            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
-        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
-            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+        setTintList(tint);
+        setBackgroundTintList(backgroundTint);
     }
 
 
@@ -352,183 +337,15 @@ public class HorizontalScrollView extends android.widget.HorizontalScrollView im
     // scroll bars
     // -------------------------------
 
-    Drawable scrollBarDrawable;
-
-    private void initScrollbars() {
-        try {
-            Field mScrollCacheField = View.class.getDeclaredField("mScrollCache");
-            mScrollCacheField.setAccessible(true);
-            Object mScrollCache = mScrollCacheField.get(this);
-
-            if (mScrollCache == null)
-                return;
-
-            Field scrollBarField = mScrollCache.getClass().getDeclaredField("scrollBar");
-            scrollBarField.setAccessible(true);
-            Object scrollBar = scrollBarField.get(mScrollCache);
-
-            Field mVerticalThumbField = scrollBar.getClass().getDeclaredField("mVerticalThumb");
-            mVerticalThumbField.setAccessible(true);
-            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
-            mVerticalThumbField.set(scrollBar, scrollBarDrawable);
-
-            Field mHorizontalThumbField = scrollBar.getClass().getDeclaredField("mHorizontalThumb");
-            mHorizontalThumbField.setAccessible(true);
-            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
-            mHorizontalThumbField.set(scrollBar, scrollBarDrawable);
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        }
+    protected void onDrawHorizontalScrollBar(Canvas canvas, Drawable scrollBar, int l, int t, int r, int b) {
+        scrollBar.setColorFilter(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE, tintMode);
+        scrollBar.setBounds(l, t, r, b);
+        scrollBar.draw(canvas);
     }
 
-
-    // -------------------------------
-    // transformations
-    // -------------------------------
-
-    public float getAlpha() {
-        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
-    }
-
-    public void setAlpha(float alpha) {
-        if (NEEDS_PROXY) {
-            wrap(this).setAlpha(alpha);
-        } else {
-            super.setAlpha(alpha);
-        }
-    }
-
-    public float getPivotX() {
-        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
-    }
-
-    public void setPivotX(float pivotX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotX(pivotX);
-        } else {
-            super.setPivotX(pivotX);
-        }
-    }
-
-    public float getPivotY() {
-        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
-    }
-
-    public void setPivotY(float pivotY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotY(pivotY);
-        } else {
-            super.setPivotY(pivotY);
-        }
-    }
-
-    public float getRotation() {
-        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
-    }
-
-    public void setRotation(float rotation) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotation(rotation);
-        } else {
-            super.setRotation(rotation);
-        }
-    }
-
-    public float getRotationX() {
-        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
-    }
-
-    public void setRotationX(float rotationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationX(rotationX);
-        } else {
-            super.setRotationX(rotationX);
-        }
-    }
-
-    public float getRotationY() {
-        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
-    }
-
-    public void setRotationY(float rotationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationY(rotationY);
-        } else {
-            super.setRotationY(rotationY);
-        }
-    }
-
-    public float getScaleX() {
-        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
-    }
-
-    public void setScaleX(float scaleX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleX(scaleX);
-        } else {
-            super.setScaleX(scaleX);
-        }
-    }
-
-    public float getScaleY() {
-        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
-    }
-
-    public void setScaleY(float scaleY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleY(scaleY);
-        } else {
-            super.setScaleY(scaleY);
-        }
-    }
-
-    public float getTranslationX() {
-        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
-    }
-
-    public void setTranslationX(float translationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationX(translationX);
-        } else {
-            super.setTranslationX(translationX);
-        }
-    }
-
-    public float getTranslationY() {
-        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
-    }
-
-    public void setTranslationY(float translationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationY(translationY);
-        } else {
-            super.setTranslationY(translationY);
-        }
-    }
-
-    public float getX() {
-        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
-    }
-
-    public void setX(float x) {
-        if (NEEDS_PROXY) {
-            wrap(this).setX(x);
-        } else {
-            super.setX(x);
-        }
-    }
-
-    public float getY() {
-        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
-    }
-
-    public void setY(float y) {
-        if (NEEDS_PROXY) {
-            wrap(this).setY(y);
-        } else {
-            super.setY(y);
-        }
+    protected void onDrawVerticalScrollBar(Canvas canvas, Drawable scrollBar, int l, int t, int r, int b) {
+        scrollBar.setColorFilter(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE, tintMode);
+        scrollBar.setBounds(l, t, r, b);
+        scrollBar.draw(canvas);
     }
 }

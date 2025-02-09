@@ -1,17 +1,17 @@
 package tk.zielony.carbonsamples.feature;
 
-import android.app.Activity;
 import android.os.Bundle;
 
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2014-12-15.
- */
-public class TextAppearanceActivity extends Activity {
+@SampleAnnotation(layoutId = R.layout.activity_text_appearance, titleId = R.string.textappearanceActivity_title)
+public class TextAppearanceActivity extends ThemedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_text_appearance);
+
+        initToolbar();
     }
 }

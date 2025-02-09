@@ -1,30 +1,49 @@
 package carbon.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Point;
+import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.widget.LinearLayoutManager;
 import android.util.AttributeSet;
-import android.view.LayoutInflater;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewParent;
+import android.view.ViewAnimationUtils;
+import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 
-import com.nineoldandroids.animation.ValueAnimator;
-import com.nineoldandroids.view.ViewHelper;
+import androidx.annotation.AttrRes;
+import androidx.annotation.FloatRange;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StyleRes;
+import androidx.core.view.GravityCompat;
+import androidx.core.view.ViewCompat;
 
-import java.lang.reflect.Field;
+import com.google.android.material.shape.CutCornerTreatment;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.RoundedCornerTreatment;
+import com.google.android.material.shape.ShapeAppearanceModel;
+
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -32,293 +51,499 @@ import java.util.List;
 import carbon.Carbon;
 import carbon.R;
 import carbon.animation.AnimatedColorStateList;
-import carbon.drawable.DefaultPrimaryColorStateList;
+import carbon.animation.AnimatedView;
+import carbon.animation.StateAnimator;
 import carbon.drawable.EdgeEffect;
-import carbon.drawable.RectDrawable;
 import carbon.drawable.ripple.RippleDrawable;
 import carbon.drawable.ripple.RippleView;
-import carbon.internal.DefaultItemAnimator;
 import carbon.internal.ElevationComparator;
-import carbon.internal.MatrixHelper;
-import carbon.shadow.Shadow;
-import carbon.shadow.ShadowGenerator;
-import carbon.shadow.ShadowView;
+import carbon.internal.RevealAnimator;
+import carbon.recycler.DividerItemDecoration;
+import carbon.recycler.ViewItemDecoration;
+import carbon.view.MarginView;
+import carbon.view.MaxSizeView;
+import carbon.view.RevealView;
+import carbon.view.ShadowView;
+import carbon.view.ShapeModelView;
+import carbon.view.StateAnimatorView;
+import carbon.view.StrokeView;
+import carbon.view.TintedView;
+import carbon.view.TouchMarginView;
+import carbon.view.VisibleView;
 
-import static com.nineoldandroids.view.animation.AnimatorProxy.NEEDS_PROXY;
-import static com.nineoldandroids.view.animation.AnimatorProxy.wrap;
+public class RecyclerView extends androidx.recyclerview.widget.RecyclerView
+        implements
+        ShadowView,
+        RippleView,
+        TouchMarginView,
+        StateAnimatorView,
+        AnimatedView,
+        ShapeModelView,
+        TintedView,
+        StrokeView,
+        MaxSizeView,
+        RevealView,
+        VisibleView,
+        MarginView {
 
-/**
- * Created by Marcin on 2015-04-28.
- */
-public class RecyclerView extends android.support.v7.widget.RecyclerView implements TintedView {
+    public interface OnItemClickedListener<Type> {
+        void onItemClicked(View view, Type item, int position);
+    }
 
-    private EdgeEffect leftGlow;
-    private EdgeEffect rightGlow;
-    private int mTouchSlop;
-    EdgeEffect topGlow;
-    EdgeEffect bottomGlow;
-    private boolean drag = true;
-    private float prevY;
-    private int overscrollMode;
-    private boolean clipToPadding;
-    long prevScroll = 0;
+    public interface OnItemClickedListener2<Type> {
+        void onItemClicked(Type item);
+    }
+
+    public class EdgeEffectFactory extends androidx.recyclerview.widget.RecyclerView.EdgeEffectFactory {
+        @NonNull
+        @Override
+        protected android.widget.EdgeEffect createEdgeEffect(@NonNull androidx.recyclerview.widget.RecyclerView view, int direction) {
+            EdgeEffect edgeEffect = new EdgeEffect(getContext());
+            if (direction == DIRECTION_TOP) {
+                topGlow = edgeEffect;
+            } else if (direction == DIRECTION_BOTTOM) {
+                bottomGlow = edgeEffect;
+            } else if (direction == DIRECTION_LEFT) {
+                leftGlow = edgeEffect;
+            } else if (direction == DIRECTION_RIGHT) {
+                rightGlow = edgeEffect;
+            }
+            int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
+            edgeEffect.setColor(color);
+            return edgeEffect;
+        }
+    }
+
+    public static class LinearLayoutManager extends androidx.recyclerview.widget.LinearLayoutManager {
+        private int gravity;
+
+        public LinearLayoutManager(Context context) {
+            super(context);
+        }
+
+        public LinearLayoutManager(Context context, int orientation, boolean reverseLayout, int gravity) {
+            super(context, orientation, reverseLayout);
+            this.gravity = gravity;
+        }
+
+        public LinearLayoutManager(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+            super(context, attrs, defStyleAttr, defStyleRes);
+        }
+
+        public int getGravity() {
+            return gravity;
+        }
+
+        public void setGravity(int gravity) {
+            this.gravity = gravity;
+        }
+
+        @Override
+        public void layoutDecoratedWithMargins(@NonNull View child, int left, int top, int right, int bottom) {
+            if (getOrientation() == androidx.recyclerview.widget.RecyclerView.VERTICAL) {
+                int absoluteGravity = GravityCompat.getAbsoluteGravity(gravity, getLayoutDirection());
+                if ((absoluteGravity & Gravity.CENTER_HORIZONTAL) != 0) {
+                    int width = right - left;
+                    right = (getWidth() + width) / 2;
+                    left = (getWidth() - width) / 2;
+                } else if ((absoluteGravity & Gravity.RIGHT) != 0) {
+                    int width = right - left;
+                    right = getWidth();
+                    left = right - width;
+                }
+            } else {
+                int absoluteGravity = GravityCompat.getAbsoluteGravity(gravity, getLayoutDirection());
+                if ((absoluteGravity & Gravity.CENTER_VERTICAL) != 0) {
+                    int height = bottom - top;
+                    bottom = (getHeight() + height) / 2;
+                    top = (getHeight() - height) / 2;
+                } else if ((absoluteGravity & Gravity.BOTTOM) != 0) {
+                    int height = bottom - top;
+                    bottom = getHeight();
+                    top = bottom - height;
+                }
+            }
+            super.layoutDecoratedWithMargins(child, left, top, right, bottom);
+        }
+
+        @Override
+        public void layoutDecorated(@NonNull View child, int left, int top, int right, int bottom) {
+            super.layoutDecorated(child, left, top, right, bottom);
+        }
+    }
+
     private boolean childDrawingOrderCallbackSet = false;
-    OnItemClickedListener onItemClickedListener;
+
+    private int scrollX = 0;
+    private int scrollY = 0;
+
+    private EdgeEffect leftGlow, rightGlow, topGlow, bottomGlow;
+    private DividerItemDecoration dividerItemDecoration;
+
+    private OnTouchListener onDispatchTouchListener;
+
+    private ArrayList<ViewItemDecoration> viewItemDecorations = new ArrayList<>();
 
     public RecyclerView(Context context) {
         super(context, null, R.attr.carbon_recyclerViewStyle);
-        initRecycler(null, R.attr.carbon_recyclerViewStyle);
+        initRecycler(null, R.attr.carbon_recyclerViewStyle, R.style.carbon_RecyclerView);
     }
 
     public RecyclerView(Context context, AttributeSet attrs) {
         super(context, attrs, R.attr.carbon_recyclerViewStyle);
-        initRecycler(attrs, R.attr.carbon_recyclerViewStyle);
+        initRecycler(attrs, R.attr.carbon_recyclerViewStyle, R.style.carbon_RecyclerView);
     }
 
-    public RecyclerView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public RecyclerView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initRecycler(attrs, defStyleAttr);
+        initRecycler(attrs, defStyleAttr, R.style.carbon_RecyclerView);
     }
 
-    private void initRecycler(AttributeSet attrs, int defStyleAttr) {
-        if (attrs != null) {
-            Carbon.initTint(this, attrs, defStyleAttr);
+    public RecyclerView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        super(context, attrs, defStyleAttr);
+        initRecycler(attrs, defStyleAttr, defStyleRes);
+    }
 
-            TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.RecyclerView, defStyleAttr, 0);
-            for (int i = 0; i < a.getIndexCount(); i++) {
-                int attr = a.getIndex(i);
-                if (attr == R.styleable.RecyclerView_carbon_overScroll) {
-                    setOverScrollMode(a.getInt(attr, ViewCompat.OVER_SCROLL_ALWAYS));
-                } else if (attr == R.styleable.RecyclerView_carbon_headerTint) {
-                    setHeaderTint(a.getColor(attr, 0));
-                } else if (attr == R.styleable.RecyclerView_carbon_headerMinHeight) {
-                    setHeaderMinHeight((int) a.getDimension(attr, 0.0f));
-                } else if (attr == R.styleable.RecyclerView_carbon_headerParallax) {
-                    setHeaderParallax(a.getFloat(attr, 0.0f));
-                } else if (attr == R.styleable.RecyclerView_android_divider) {
-                    Drawable drawable = a.getDrawable(attr);
-                    float height = a.getDimension(R.styleable.RecyclerView_android_dividerHeight, 0);
-                    if (drawable != null && height > 0)
-                        setDivider(drawable, (int) height);
+    private static int[] animationIds = new int[]{
+            R.styleable.RecyclerView_carbon_inAnimation,
+            R.styleable.RecyclerView_carbon_outAnimation
+    };
+    private static int[] tintIds = new int[]{
+            R.styleable.RecyclerView_carbon_tint,
+            R.styleable.RecyclerView_carbon_tintMode,
+            R.styleable.RecyclerView_carbon_backgroundTint,
+            R.styleable.RecyclerView_carbon_backgroundTintMode,
+            R.styleable.RecyclerView_carbon_animateColorChanges
+    };
+    private static int[] strokeIds = new int[]{
+            R.styleable.RecyclerView_carbon_stroke,
+            R.styleable.RecyclerView_carbon_strokeWidth
+    };
+    private static int[] cornerCutRadiusIds = new int[]{
+            R.styleable.RecyclerView_carbon_cornerRadiusTopStart,
+            R.styleable.RecyclerView_carbon_cornerRadiusTopEnd,
+            R.styleable.RecyclerView_carbon_cornerRadiusBottomStart,
+            R.styleable.RecyclerView_carbon_cornerRadiusBottomEnd,
+            R.styleable.RecyclerView_carbon_cornerRadius,
+            R.styleable.RecyclerView_carbon_cornerCutTopStart,
+            R.styleable.RecyclerView_carbon_cornerCutTopEnd,
+            R.styleable.RecyclerView_carbon_cornerCutBottomStart,
+            R.styleable.RecyclerView_carbon_cornerCutBottomEnd,
+            R.styleable.RecyclerView_carbon_cornerCut
+    };
+    private static int[] maxSizeIds = new int[]{
+            R.styleable.RecyclerView_carbon_maxWidth,
+            R.styleable.RecyclerView_carbon_maxHeight,
+    };
+    private static int[] elevationIds = new int[]{
+            R.styleable.RecyclerView_carbon_elevation,
+            R.styleable.RecyclerView_carbon_elevationShadowColor,
+            R.styleable.RecyclerView_carbon_elevationAmbientShadowColor,
+            R.styleable.RecyclerView_carbon_elevationSpotShadowColor
+    };
+
+    private void initRecycler(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.RecyclerView, defStyleAttr, defStyleRes);
+
+        for (int i = 0; i < a.getIndexCount(); i++) {
+            int attr = a.getIndex(i);
+            if (attr == R.styleable.RecyclerView_carbon_overScroll) {
+                setOverScrollMode(a.getInt(attr, OVER_SCROLL_ALWAYS));
+            } else if (attr == R.styleable.RecyclerView_android_divider) {
+                Drawable drawable = Carbon.getDefaultColorDrawable(this, a, attr);
+                float height = a.getDimension(R.styleable.RecyclerView_android_dividerHeight, 0);
+                if (drawable != null && height > 0) {
+                    setDivider(drawable, (int) height);
                 }
             }
-            a.recycle();
         }
+
+        Carbon.initDefaultBackground(this, a, R.styleable.RecyclerView_android_background);
+        Carbon.initElevation(this, a, elevationIds);
+        Carbon.initAnimations(this, a, animationIds);
+        Carbon.initMaxSize(this, a, maxSizeIds);
+        Carbon.initTint(this, a, tintIds);
+        Carbon.initStroke(this, a, strokeIds);
+        Carbon.initCornerCutRadius(this, a, cornerCutRadiusIds);
+
+        a.recycle();
 
         setClipToPadding(false);
-        setItemAnimator(new DefaultItemAnimator());
-
-        initScrollbars();
+        setWillNotDraw(false);
+        setEdgeEffectFactory(new EdgeEffectFactory());
     }
 
-    public void setOnItemClickedListener(OnItemClickedListener onItemClickedListener) {
-        this.onItemClickedListener = onItemClickedListener;
+    public DividerItemDecoration setDivider(Drawable divider, int height) {
+        if (divider == null && dividerItemDecoration != null) {
+            removeItemDecoration(dividerItemDecoration);
+            dividerItemDecoration = null;
+        }else {
+            dividerItemDecoration = new DividerItemDecoration(divider, height);
+            dividerItemDecoration.setDrawBefore(position -> position > 0);
+            addItemDecoration(dividerItemDecoration);
+        }
+        return dividerItemDecoration;
     }
 
-    public interface OnItemClickedListener {
-        void onItemClicked(int position);
+    public void clearItemDecorations() {
+        dividerItemDecoration = null;
+        for (int i = 0; i < getItemDecorationCount(); i++)
+            removeItemDecorationAt(i);
     }
 
-    public void addView(final View child, int index) {
-        if (onItemClickedListener != null) {
-            child.setOnClickListener(new OnClickListener() {
+    @Override
+    public void addItemDecoration(@NonNull ItemDecoration decor, int index) {
+        super.addItemDecoration(decor, index);
+        if (decor instanceof ViewItemDecoration)
+            viewItemDecorations.add((ViewItemDecoration) decor);
+    }
+
+    @Override
+    public void removeItemDecoration(@NonNull ItemDecoration decor) {
+        super.removeItemDecoration(decor);
+        if (decor instanceof ViewItemDecoration)
+            viewItemDecorations.remove(decor);
+    }
+
+    @Override
+    public void offsetChildrenHorizontal(int dx) {
+        super.offsetChildrenHorizontal(dx);
+        scrollX -= dx;
+    }
+
+    public int getListScrollX() {
+        return scrollX;
+    }
+
+    public int getMaxScrollX() {
+        Adapter adapter = getAdapter();
+        LayoutManager layoutManager = getLayoutManager();
+        if (adapter == null || layoutManager == null || getChildCount() == 0 || adapter.getItemCount() == 0)
+            return 0;
+        View view = getChildAt(getChildCount() - 1);
+        int position = getChildAdapterPosition(view);
+        if (position == adapter.getItemCount())
+            return Math.max(0, view.getRight() - getWidth());
+        return Integer.MAX_VALUE;
+    }
+
+    @Override
+    public void offsetChildrenVertical(int dy) {
+        super.offsetChildrenVertical(dy);
+        scrollY -= dy;
+    }
+
+    public int getListScrollY() {
+        return scrollY;
+    }
+
+    public int getMaxScrollY() {
+        Adapter adapter = getAdapter();
+        LayoutManager layoutManager = getLayoutManager();
+        if (adapter == null || layoutManager == null || getChildCount() == 0 || adapter.getItemCount() == 0)
+            return 0;
+        View view = getChildAt(getChildCount() - 1);
+        int position = getChildAdapterPosition(view);
+        if (position == adapter.getItemCount())
+            return Math.max(0, view.getBottom() - getHeight());
+        return Integer.MAX_VALUE;
+    }
+
+    public static abstract class Pagination extends OnScrollListener {
+        private androidx.recyclerview.widget.LinearLayoutManager layoutManager;
+
+        public Pagination(androidx.recyclerview.widget.LinearLayoutManager layoutManager) {
+            this.layoutManager = layoutManager;
+        }
+
+        @Override
+        public void onScrolled(@NotNull androidx.recyclerview.widget.RecyclerView recyclerView, int dx, int dy) {
+            int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
+
+            if (!isLoading() && !isLastPage()) {
+                if (layoutManager.getChildCount() + firstVisibleItemPosition >= layoutManager.getItemCount())
+                    loadNextPage();
+            }
+        }
+
+        protected abstract boolean isLoading();
+
+        protected abstract boolean isLastPage();
+
+        protected abstract void loadNextPage();
+    }
+
+    Pagination pagination;
+
+    public void setPagination(Pagination pagination) {
+        if (this.pagination != null)
+            removeOnScrollListener(this.pagination);
+        this.pagination = pagination;
+        if (pagination != null)
+            addOnScrollListener(pagination);
+    }
+
+    private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private boolean drawCalled = false;
+
+
+    // -------------------------------
+    // scroll bars
+    // -------------------------------
+
+    protected void onDrawHorizontalScrollBar(Canvas canvas, Drawable scrollBar, int l, int t, int r, int b) {
+        scrollBar.setColorFilter(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE, tintMode);
+        scrollBar.setBounds(l, t, r, b);
+        scrollBar.draw(canvas);
+    }
+
+    protected void onDrawVerticalScrollBar(Canvas canvas, Drawable scrollBar, int l, int t, int r, int b) {
+        scrollBar.setColorFilter(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE, tintMode);
+        scrollBar.setBounds(l, t, r, b);
+        scrollBar.draw(canvas);
+    }
+
+
+    RevealAnimator revealAnimator;
+
+    public Point getLocationOnScreen() {
+        int[] outLocation = new int[2];
+        super.getLocationOnScreen(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    public Point getLocationInWindow() {
+        int[] outLocation = new int[2];
+        super.getLocationInWindow(outLocation);
+        return new Point(outLocation[0], outLocation[1]);
+    }
+
+    @NotNull
+    public Animator createCircularReveal(android.view.View hotspot, float startRadius, float finishRadius) {
+        int[] location = new int[2];
+        hotspot.getLocationOnScreen(location);
+        int[] myLocation = new int[2];
+        getLocationOnScreen(myLocation);
+        return createCircularReveal(location[0] - myLocation[0] + hotspot.getWidth() / 2, location[1] - myLocation[1] + hotspot.getHeight() / 2, startRadius, finishRadius);
+    }
+
+    @NotNull
+    @Override
+    public Animator createCircularReveal(int x, int y, float startRadius, float finishRadius) {
+        startRadius = Carbon.getRevealRadius(this, x, y, startRadius);
+        finishRadius = Carbon.getRevealRadius(this, x, y, finishRadius);
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            Animator circularReveal = ViewAnimationUtils.createCircularReveal(this, x, y, startRadius, finishRadius);
+            circularReveal.setDuration(Carbon.getDefaultRevealDuration());
+            return circularReveal;
+        } else {
+            revealAnimator = new RevealAnimator(x, y, startRadius, finishRadius);
+            revealAnimator.setDuration(Carbon.getDefaultRevealDuration());
+            revealAnimator.addUpdateListener(animation -> {
+                RevealAnimator reveal = ((RevealAnimator) animation);
+                reveal.radius = (float) reveal.getAnimatedValue();
+                reveal.mask.reset();
+                reveal.mask.addCircle(reveal.x, reveal.y, Math.max((Float) reveal.getAnimatedValue(), 1), Path.Direction.CW);
+                postInvalidate();
+            });
+            revealAnimator.addListener(new AnimatorListenerAdapter() {
                 @Override
-                public void onClick(View v) {
-                    onItemClickedListener.onItemClicked(findContainingViewHolder(child).getAdapterPosition());
+                public void onAnimationCancel(Animator animation) {
+                    revealAnimator = null;
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    revealAnimator = null;
                 }
             });
-        }
-        super.addView(child, index);
-    }
-
-    @Override
-    public void removeView(View view) {
-        if (onItemClickedListener != null)
-            view.setOnClickListener(null);
-        super.removeView(view);
-    }
-
-    @Override
-    public void removeViewAt(int index) {
-        final View child = getChildAt(index);
-        if (child != null) {
-            if (onItemClickedListener != null)
-                child.setOnClickListener(null);
-            super.removeView(child);
+            return revealAnimator;
         }
     }
-
-    public void setDivider(Drawable divider, int height) {
-        addItemDecoration(new DividerItemDecoration(divider, height));
-    }
-
-    @Override
-    public void setClipToPadding(boolean clipToPadding) {
-        super.setClipToPadding(clipToPadding);
-        this.clipToPadding = clipToPadding;
-    }
-
-    @Override
-    public boolean dispatchTouchEvent(@NonNull MotionEvent ev) {
-        switch (ev.getAction()) {
-            case MotionEvent.ACTION_MOVE:
-                float deltaY = prevY - ev.getY();
-
-                if (!drag && Math.abs(deltaY) > mTouchSlop) {
-                    final ViewParent parent = getParent();
-                    if (parent != null) {
-                        parent.requestDisallowInterceptTouchEvent(true);
-                    }
-                    drag = true;
-                    if (deltaY > 0) {
-                        deltaY -= mTouchSlop;
-                    } else {
-                        deltaY += mTouchSlop;
-                    }
-                }
-                if (drag) {
-                    final int oldY = computeVerticalScrollOffset();
-                    int range = computeVerticalScrollRange() - getHeight();
-                    if (header != null)
-                        range += header.getHeight();
-                    boolean canOverscroll = overscrollMode == ViewCompat.OVER_SCROLL_ALWAYS ||
-                            (overscrollMode == ViewCompat.OVER_SCROLL_IF_CONTENT_SCROLLS && range > 0);
-
-                    if (canOverscroll) {
-                        float pulledToY = oldY + deltaY;
-                        if (pulledToY < 0) {
-                            topGlow.onPull(deltaY / getHeight(), ev.getX() / getWidth());
-                            if (!bottomGlow.isFinished())
-                                bottomGlow.onRelease();
-                        } else if (pulledToY > range) {
-                            bottomGlow.onPull(deltaY / getHeight(), 1.f - ev.getX() / getWidth());
-                            if (!topGlow.isFinished())
-                                topGlow.onRelease();
-                        }
-                        if (topGlow != null && (!topGlow.isFinished() || !bottomGlow.isFinished()))
-                            postInvalidate();
-                    }
-                }
-                break;
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                if (drag) {
-                    drag = false;
-
-                    if (topGlow != null) {
-                        topGlow.onRelease();
-                        bottomGlow.onRelease();
-                    }
-                }
-                break;
-        }
-        prevY = ev.getY();
-
-        return super.dispatchTouchEvent(ev);
-    }
-
-    @Override
-    public void onScrolled(int dx, int dy) {
-        super.onScrolled(dx, dy);
-        if (drag || topGlow == null)
-            return;
-        int range = computeVerticalScrollRange() - getHeight();
-        if (header != null)
-            range += header.getHeight();
-        boolean canOverscroll = overscrollMode == ViewCompat.OVER_SCROLL_ALWAYS ||
-                (overscrollMode == ViewCompat.OVER_SCROLL_IF_CONTENT_SCROLLS && range > 0);
-
-        if (canOverscroll) {
-            long t = System.currentTimeMillis();
-            /*int velx = (int) (dx * 1000.0f / (t - prevScroll));
-            if (computeHorizontalScrollOffset() == 0 && dx < 0) {
-                leftGlow.onAbsorb(-velx);
-            } else if (computeHorizontalScrollOffset() == computeHorizontalScrollRange() - getWidth() && dx > 0) {
-                rightGlow.onAbsorb(velx);
-            }*/
-            int vely = (int) (dy * 1000.0f / (t - prevScroll));
-            if (computeVerticalScrollOffset() == 0 && dy < 0) {
-                topGlow.onAbsorb(-vely);
-            } else if (computeVerticalScrollOffset() == range && dy > 0) {
-                bottomGlow.onAbsorb(vely);
-            }
-            prevScroll = t;
-        }
-    }
-
-    @Override
-    protected void drawableStateChanged() {
-        super.drawableStateChanged();
-        updateTint();
-    }
-
-
-    List<View> views;
-    private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
-        views = new ArrayList<>();
-        for (int i = 0; i < getChildCount(); i++)
-            views.add(getChildAt(i));
-        Collections.sort(views, new ElevationComparator());
+        boolean r = revealAnimator != null && revealAnimator.isRunning();
+        boolean c = !Carbon.isShapeRect(shapeModel, boundsRect);
 
-        dispatchDrawWithHeader(canvas);
-    }
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            if (spotShadowColor != null)
+                super.setOutlineSpotShadowColor(spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()));
+            if (ambientShadowColor != null)
+                super.setOutlineAmbientShadowColor(ambientShadowColor.getColorForState(getDrawableState(), ambientShadowColor.getDefaultColor()));
+        }
 
-    @Override
-    public void setOverScrollMode(int mode) {
-        if (mode != OVER_SCROLL_NEVER) {
-            if (topGlow == null) {
-                Context context = getContext();
-                topGlow = new EdgeEffect(context);
-                bottomGlow = new EdgeEffect(context);
-                updateTint();
+        // draw not called, we have to handle corners here
+        if (isInEditMode() && !drawCalled && (r || c) && getWidth() > 0 && getHeight() > 0) {
+            Bitmap layer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas layerCanvas = new Canvas(layer);
+            dispatchDrawInternal(layerCanvas);
+
+            Bitmap mask = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas maskCanvas = new Canvas(mask);
+            Paint maskPaint = new Paint(0xffffffff);
+            maskCanvas.drawPath(cornersMask, maskPaint);
+
+            for (int x = 0; x < getWidth(); x++) {
+                for (int y = 0; y < getHeight(); y++) {
+                    int maskPixel = mask.getPixel(x, y);
+                    layer.setPixel(x, y, Color.alpha(maskPixel) > 0 ? layer.getPixel(x, y) : 0);
+                }
             }
+            canvas.drawBitmap(layer, 0, 0, paint);
+        } else if (!drawCalled && (r || c) && getWidth() > 0 && getHeight() > 0 && !Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            if (r) {
+                int saveCount2 = canvas.save();
+                canvas.clipRect(revealAnimator.x - revealAnimator.radius, revealAnimator.y - revealAnimator.radius, revealAnimator.x + revealAnimator.radius, revealAnimator.y + revealAnimator.radius);
+                dispatchDrawInternal(canvas);
+                canvas.restoreToCount(saveCount2);
+            } else {
+                dispatchDrawInternal(canvas);
+            }
+
+            paint.setXfermode(Carbon.CLEAR_MODE);
+            if (c) {
+                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
+                canvas.drawPath(cornersMask, paint);
+            }
+            if (r)
+                canvas.drawPath(revealAnimator.mask, paint);
+            paint.setXfermode(null);
+
+            canvas.restoreToCount(saveCount);
         } else {
-            topGlow = null;
-            bottomGlow = null;
+            dispatchDrawInternal(canvas);
         }
-        try {
-            super.setOverScrollMode(ViewCompat.OVER_SCROLL_NEVER);
-        } catch (Exception e) {
-            // Froyo
-        }
-        this.overscrollMode = mode;
+        drawCalled = false;
+    }
+
+    private void dispatchDrawInternal(@NonNull Canvas canvas) {
+        Collections.sort(getViews(), new ElevationComparator());
+
+        super.dispatchDraw(canvas);
+        if (stroke != null)
+            drawStroke(canvas);
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+            rippleDrawable.draw(canvas);
     }
 
     @Override
-    public boolean drawChild(Canvas canvas, View child, long drawingTime) {
-        if (!child.isShown())
-            return super.drawChild(canvas, child, drawingTime);
-
-        if (!isInEditMode() && child instanceof ShadowView && Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT_WATCH) {
+    public boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
+        // TODO: why isShown() returns false after being reattached?
+        if (child instanceof ShadowView && (!Carbon.IS_LOLLIPOP_OR_HIGHER || ((ShadowView) child).getElevationShadowColor() != null && !Carbon.IS_PIE_OR_HIGHER)) {
             ShadowView shadowView = (ShadowView) child;
-            Shadow shadow = shadowView.getShadow();
-            if (shadow != null) {
-                paint.setAlpha((int) (ShadowGenerator.ALPHA * ViewHelper.getAlpha(child)));
-
-                float childElevation = shadowView.getElevation() + shadowView.getTranslationZ();
-
-                int saveCount = canvas.save(Canvas.MATRIX_SAVE_FLAG);
-                canvas.translate(0, childElevation / 2);
-                canvas.translate(child.getLeft(), child.getTop());
-
-                Matrix matrix = MatrixHelper.getMatrix(child);
-                canvas.concat(matrix);
-                shadow.draw(canvas, child, paint);
-                canvas.restoreToCount(saveCount);
-            }
+            shadowView.drawShadow(canvas);
         }
 
         if (child instanceof RippleView) {
             RippleView rippleView = (RippleView) child;
             RippleDrawable rippleDrawable = rippleView.getRippleDrawable();
             if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless) {
-                int saveCount = canvas.save(Canvas.MATRIX_SAVE_FLAG);
-                canvas.translate(
-                        child.getLeft(),
-                        child.getTop());
+                int saveCount = canvas.save();
+                canvas.translate(child.getLeft(), child.getTop());
+                canvas.concat(child.getMatrix());
                 rippleDrawable.draw(canvas);
                 canvas.restoreToCount(saveCount);
             }
@@ -331,7 +556,9 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     protected int getChildDrawingOrder(int childCount, int child) {
         if (childDrawingOrderCallbackSet)
             return super.getChildDrawingOrder(childCount, child);
-        return views != null ? indexOfChild(views.get(child)) : child;
+        if (views.size() != childCount)
+            getViews();
+        return indexOfChild(views.get(child));
     }
 
     @Override
@@ -339,6 +566,650 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
         super.setChildDrawingOrderCallback(childDrawingOrderCallback);
         childDrawingOrderCallbackSet = childDrawingOrderCallback != null;
     }
+
+    protected boolean isTransformedTouchPointInView(float x, float y, View child, PointF outLocalPoint) {
+        final Rect frame = new Rect();
+        child.getHitRect(frame);
+        return frame.contains((int) x, (int) y);
+    }
+
+
+    // -------------------------------
+    // corners
+    // -------------------------------
+
+    private RectF boundsRect = new RectF();
+    private Path cornersMask = new Path();
+
+    @NotNull
+    public ShapeAppearanceModel getShapeModel() {
+        return shapeModel;
+    }
+
+
+    /**
+     * Sets the corner radius. If corner radius is equal to 0, rounded corners are turned off.
+     *
+     * @param cornerRadius
+     */
+    @Override
+    public void setCornerRadius(float cornerRadius) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new RoundedCornerTreatment(cornerRadius)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setCornerCut(float cornerCut) {
+        shapeModel = ShapeAppearanceModel.builder().setAllCorners(new CutCornerTreatment(cornerCut)).build();
+        setShapeModel(shapeModel);
+    }
+
+    @Override
+    public void setShapeModel(@NotNull ShapeAppearanceModel model) {
+        this.shapeModel = model;
+        shadowDrawable = new MaterialShapeDrawable(shapeModel);
+        if (getWidth() > 0 && getHeight() > 0)
+            updateCorners();
+        if (!Carbon.IS_LOLLIPOP_OR_HIGHER)
+            postInvalidate();
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+
+        if (!changed)
+            return;
+
+        if (getWidth() == 0 || getHeight() == 0)
+            return;
+
+        updateCorners();
+
+        if (rippleDrawable != null)
+            rippleDrawable.setBounds(0, 0, getWidth(), getHeight());
+    }
+
+    private void updateCorners() {
+        if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (!Carbon.isShapeRect(shapeModel, boundsRect))
+                setClipToOutline(true);
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    if (Carbon.isShapeRect(shapeModel, boundsRect)) {
+                        outline.setRect(0, 0, getWidth(), getHeight());
+                    } else {
+                        shadowDrawable.setBounds(0, 0, getWidth(), getHeight());
+                        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_NEVER);
+                        shadowDrawable.getOutline(outline);
+                    }
+                }
+            });
+        }
+
+        boundsRect.set(shadowDrawable.getBounds());
+        shadowDrawable.getPathForSize(getWidth(), getHeight(), cornersMask);
+    }
+
+    public void drawInternal(@NonNull Canvas canvas) {
+        super.draw(canvas);
+        if (stroke != null)
+            drawStroke(canvas);
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Over)
+            rippleDrawable.draw(canvas);
+    }
+
+    @SuppressLint("MissingSuperCall")
+    @Override
+    public void draw(@NonNull Canvas canvas) {
+        drawCalled = true;
+        boolean r = revealAnimator != null;
+        boolean c = !Carbon.isShapeRect(shapeModel, boundsRect);
+
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            if (spotShadowColor != null)
+                super.setOutlineSpotShadowColor(spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()));
+            if (ambientShadowColor != null)
+                super.setOutlineAmbientShadowColor(ambientShadowColor.getColorForState(getDrawableState(), ambientShadowColor.getDefaultColor()));
+        }
+
+        if (isInEditMode() && (r || c) && getWidth() > 0 && getHeight() > 0) {
+            Bitmap layer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas layerCanvas = new Canvas(layer);
+            drawInternal(layerCanvas);
+
+            Bitmap mask = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas maskCanvas = new Canvas(mask);
+            Paint maskPaint = new Paint(0xffffffff);
+            maskCanvas.drawPath(cornersMask, maskPaint);
+
+            for (int x = 0; x < getWidth(); x++) {
+                for (int y = 0; y < getHeight(); y++) {
+                    int maskPixel = mask.getPixel(x, y);
+                    layer.setPixel(x, y, Color.alpha(maskPixel) > 0 ? layer.getPixel(x, y) : 0);
+                }
+            }
+            canvas.drawBitmap(layer, 0, 0, paint);
+        } else if (getWidth() > 0 && getHeight() > 0 && (((r || c) && !Carbon.IS_LOLLIPOP_OR_HIGHER) || !shapeModel.isRoundRect(boundsRect))) {
+            int saveCount = canvas.saveLayer(0, 0, getWidth(), getHeight(), null, Canvas.ALL_SAVE_FLAG);
+
+            if (r) {
+                int saveCount2 = canvas.save();
+                canvas.clipRect(revealAnimator.x - revealAnimator.radius, revealAnimator.y - revealAnimator.radius, revealAnimator.x + revealAnimator.radius, revealAnimator.y + revealAnimator.radius);
+                drawInternal(canvas);
+                canvas.restoreToCount(saveCount2);
+            } else {
+                drawInternal(canvas);
+            }
+
+            paint.setXfermode(Carbon.CLEAR_MODE);
+            if (c) {
+                cornersMask.setFillType(Path.FillType.INVERSE_WINDING);
+                canvas.drawPath(cornersMask, paint);
+            }
+            if (r)
+                canvas.drawPath(revealAnimator.mask, paint);
+            paint.setXfermode(null);
+
+            canvas.restoreToCount(saveCount);
+            paint.setXfermode(null);
+        } else {
+            drawInternal(canvas);
+        }
+    }
+
+
+    // -------------------------------
+    // ripple
+    // -------------------------------
+
+    private RippleDrawable rippleDrawable;
+
+    @Override
+    public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        if (shadowDrawable.isPointInTransparentRegion((int) event.getX(), (int) event.getY()))
+            return false;
+        if (onDispatchTouchListener != null && onDispatchTouchListener.onTouch(this, event))
+            return true;
+
+        if (rippleDrawable != null && event.getAction() == MotionEvent.ACTION_DOWN)
+            rippleDrawable.setHotspot(event.getX(), event.getY());
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override
+    public RippleDrawable getRippleDrawable() {
+        return rippleDrawable;
+    }
+
+    @Override
+    public void setRippleDrawable(RippleDrawable newRipple) {
+        if (rippleDrawable != null) {
+            rippleDrawable.setCallback(null);
+            if (rippleDrawable.getStyle() == RippleDrawable.Style.Background)
+                super.setBackgroundDrawable(rippleDrawable.getBackground());
+        }
+
+        if (newRipple != null) {
+            newRipple.setCallback(this);
+            newRipple.setBounds(0, 0, getWidth(), getHeight());
+            newRipple.setState(getDrawableState());
+            ((Drawable) newRipple).setVisible(getVisibility() == VISIBLE, false);
+            if (newRipple.getStyle() == RippleDrawable.Style.Background)
+                super.setBackgroundDrawable((Drawable) newRipple);
+        }
+
+        rippleDrawable = newRipple;
+    }
+
+    @Override
+    protected boolean verifyDrawable(@NonNull Drawable who) {
+        return super.verifyDrawable(who) || rippleDrawable == who;
+    }
+
+    @Override
+    public void invalidateDrawable(@NonNull Drawable drawable) {
+        super.invalidateDrawable(drawable);
+        invalidateParentIfNeeded();
+    }
+
+    @Override
+    public void invalidate(@NonNull Rect dirty) {
+        super.invalidate(dirty);
+        invalidateParentIfNeeded();
+    }
+
+    @Override
+    public void invalidate(int l, int t, int r, int b) {
+        super.invalidate(l, t, r, b);
+        invalidateParentIfNeeded();
+    }
+
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        invalidateParentIfNeeded();
+    }
+
+    private void invalidateParentIfNeeded() {
+        if (getParent() == null || !(getParent() instanceof View))
+            return;
+
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
+            ((View) getParent()).invalidate();
+
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
+            ((View) getParent()).invalidate();
+    }
+
+    @Override
+    public void postInvalidateDelayed(long delayMilliseconds) {
+        super.postInvalidateDelayed(delayMilliseconds);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
+    }
+
+    @Override
+    public void postInvalidateDelayed(long delayMilliseconds, int left, int top, int right, int bottom) {
+        super.postInvalidateDelayed(delayMilliseconds, left, top, right, bottom);
+        postInvalidateParentIfNeededDelayed(delayMilliseconds);
+    }
+
+    private void postInvalidateParentIfNeededDelayed(long delayMilliseconds) {
+        if (getParent() == null || !(getParent() instanceof View))
+            return;
+
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Borderless)
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
+
+        if (elevation > 0 || !Carbon.isShapeRect(shapeModel, boundsRect))
+            ((View) getParent()).postInvalidateDelayed(delayMilliseconds);
+    }
+
+    @Override
+    public void setBackground(Drawable background) {
+        setBackgroundDrawable(background);
+    }
+
+    @Override
+    public void setBackgroundDrawable(Drawable background) {
+        if (background instanceof RippleDrawable) {
+            setRippleDrawable((RippleDrawable) background);
+            return;
+        }
+
+        if (rippleDrawable != null && rippleDrawable.getStyle() == RippleDrawable.Style.Background) {
+            rippleDrawable.setCallback(null);
+            rippleDrawable = null;
+        }
+        super.setBackgroundDrawable(background);
+        updateBackgroundTint();
+    }
+
+
+    // -------------------------------
+    // elevation
+    // -------------------------------
+
+    private float elevation = 0;
+    private float translationZ = 0;
+    private ShapeAppearanceModel shapeModel = new ShapeAppearanceModel();
+    private MaterialShapeDrawable shadowDrawable = new MaterialShapeDrawable(shapeModel);
+    private ColorStateList ambientShadowColor, spotShadowColor;
+
+    @Override
+    public float getElevation() {
+        return elevation;
+    }
+
+    @Override
+    public void setElevation(float elevation) {
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setElevation(elevation);
+            super.setTranslationZ(translationZ);
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setElevation(elevation);
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setElevation(0);
+                super.setTranslationZ(0);
+            }
+        } else if (elevation != this.elevation && getParent() != null) {
+            ((View) getParent()).postInvalidate();
+        }
+        this.elevation = elevation;
+    }
+
+    @Override
+    public float getTranslationZ() {
+        return translationZ;
+    }
+
+    public void setTranslationZ(float translationZ) {
+        if (translationZ == this.translationZ)
+            return;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setTranslationZ(translationZ);
+        } else if (Carbon.IS_LOLLIPOP_OR_HIGHER) {
+            if (ambientShadowColor == null || spotShadowColor == null) {
+                super.setTranslationZ(translationZ);
+            } else {
+                super.setTranslationZ(0);
+            }
+        } else if (translationZ != this.translationZ && getParent() != null) {
+            ((View) getParent()).postInvalidate();
+        }
+        this.translationZ = translationZ;
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+    }
+
+    @Override
+    public boolean hasShadow() {
+        return getElevation() + getTranslationZ() >= 0.01f && getWidth() > 0 && getHeight() > 0;
+    }
+
+    @Override
+    public void drawShadow(@NotNull Canvas canvas) {
+        float alpha = getAlpha() * Carbon.getBackgroundTintAlpha(this) / 255.0f;
+        if (alpha == 0 || !hasShadow())
+            return;
+
+        float z = getElevation() + getTranslationZ();
+
+        int saveCount;
+        boolean maskShadow = getBackground() != null && alpha != 1;
+        boolean r = revealAnimator != null && revealAnimator.isRunning();
+
+        if (alpha != 1.0f) {
+            paint.setAlpha((int) (255 * alpha));
+            saveCount = canvas.saveLayer(-z, -z, canvas.getWidth() + z, canvas.getHeight() + z, paint, Canvas.ALL_SAVE_FLAG);
+        } else {
+            saveCount = canvas.save();
+        }
+
+        if (r) {
+            canvas.clipRect(
+                    getLeft() + revealAnimator.x - revealAnimator.radius, getTop() + revealAnimator.y - revealAnimator.radius,
+                    getLeft() + revealAnimator.x + revealAnimator.radius, getTop() + revealAnimator.y + revealAnimator.radius);
+        }
+
+        shadowDrawable.setFillColor(spotShadowColor);
+        shadowDrawable.setShadowColor(spotShadowColor != null ? spotShadowColor.getColorForState(getDrawableState(), spotShadowColor.getDefaultColor()) : 0xff000000);
+        shadowDrawable.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_ALWAYS);
+        shadowDrawable.setAlpha(0x44);
+        shadowDrawable.setElevation(z);
+        shadowDrawable.setShadowVerticalOffset(0);
+        shadowDrawable.setBounds(getLeft(), (int) (getTop() + z / 4), getRight(), (int) (getBottom() + z / 4));
+        shadowDrawable.draw(canvas);
+
+        canvas.translate(this.getLeft(), this.getTop());
+        paint.setXfermode(Carbon.CLEAR_MODE);
+        if (maskShadow) {
+            cornersMask.setFillType(Path.FillType.WINDING);
+            canvas.drawPath(cornersMask, paint);
+        }
+        if (r)
+            canvas.drawPath(revealAnimator.mask, paint);
+
+        canvas.restoreToCount(saveCount);
+        paint.setXfermode(null);
+        paint.setAlpha(255);
+    }
+
+    @Override
+    public void setElevationShadowColor(ColorStateList shadowColor) {
+        ambientShadowColor = spotShadowColor = shadowColor;
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public void setElevationShadowColor(int color) {
+        ambientShadowColor = spotShadowColor = ColorStateList.valueOf(color);
+        setElevation(elevation);
+        setTranslationZ(translationZ);
+    }
+
+    @Override
+    public ColorStateList getElevationShadowColor() {
+        return ambientShadowColor;
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(int color) {
+        setOutlineAmbientShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineAmbientShadowColor(ColorStateList color) {
+        ambientShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineAmbientShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineAmbientShadowColor() {
+        return ambientShadowColor.getDefaultColor();
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(int color) {
+        setOutlineSpotShadowColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setOutlineSpotShadowColor(ColorStateList color) {
+        spotShadowColor = color;
+        if (Carbon.IS_PIE_OR_HIGHER) {
+            super.setOutlineSpotShadowColor(color.getColorForState(getDrawableState(), color.getDefaultColor()));
+        } else {
+            setElevation(elevation);
+            setTranslationZ(translationZ);
+        }
+    }
+
+    @Override
+    public int getOutlineSpotShadowColor() {
+        return spotShadowColor.getDefaultColor();
+    }
+
+
+    // -------------------------------
+    // touch margin
+    // -------------------------------
+
+    private Rect touchMargin = new Rect();
+
+    @Override
+    public void setTouchMargin(int left, int top, int right, int bottom) {
+        touchMargin.set(left, top, right, bottom);
+    }
+
+    @Override
+    public void setTouchMarginLeft(int margin) {
+        touchMargin.left = margin;
+    }
+
+    @Override
+    public void setTouchMarginTop(int margin) {
+        touchMargin.top = margin;
+    }
+
+    @Override
+    public void setTouchMarginRight(int margin) {
+        touchMargin.right = margin;
+    }
+
+    @Override
+    public void setTouchMarginBottom(int margin) {
+        touchMargin.bottom = margin;
+    }
+
+    @NotNull
+    @Override
+    public Rect getTouchMargin() {
+        return touchMargin;
+    }
+
+    final RectF tmpHitRect = new RectF();
+
+    public void getHitRect(@NonNull Rect outRect) {
+        Matrix matrix = getMatrix();
+        if (matrix.isIdentity()) {
+            outRect.set(getLeft(), getTop(), getRight(), getBottom());
+        } else {
+            tmpHitRect.set(0, 0, getWidth(), getHeight());
+            matrix.mapRect(tmpHitRect);
+            outRect.set((int) tmpHitRect.left + getLeft(), (int) tmpHitRect.top + getTop(),
+                    (int) tmpHitRect.right + getLeft(), (int) tmpHitRect.bottom + getTop());
+        }
+        outRect.left -= touchMargin.left;
+        outRect.top -= touchMargin.top;
+        outRect.right += touchMargin.right;
+        outRect.bottom += touchMargin.bottom;
+    }
+
+
+    // -------------------------------
+    // state animators
+    // -------------------------------
+
+    private StateAnimator stateAnimator = new StateAnimator(this);
+
+    @NotNull
+    @Override
+    public StateAnimator getStateAnimator() {
+        return stateAnimator;
+    }
+
+    @Override
+    protected void drawableStateChanged() {
+        super.drawableStateChanged();
+        if (rippleDrawable != null && rippleDrawable.getStyle() != RippleDrawable.Style.Background)
+            rippleDrawable.setState(getDrawableState());
+        if (stateAnimator != null)
+            stateAnimator.setState(getDrawableState());
+        if (tint != null && tint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) tint).setState(getDrawableState());
+        if (backgroundTint != null && backgroundTint instanceof AnimatedColorStateList)
+            ((AnimatedColorStateList) backgroundTint).setState(getDrawableState());
+    }
+
+
+    // -------------------------------
+    // animations
+    // -------------------------------
+
+    private Animator inAnim = null, outAnim = null;
+    private Animator animator;
+
+    public Animator animateVisibility(final int visibility) {
+        if (visibility == View.VISIBLE && (getVisibility() != View.VISIBLE || animator != null)) {
+            if (animator != null)
+                animator.cancel();
+            if (inAnim != null) {
+                animator = inAnim;
+                animator.addListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator a) {
+                        a.removeListener(this);
+                        animator = null;
+                    }
+
+                    @Override
+                    public void onAnimationCancel(Animator a) {
+                        a.removeListener(this);
+                        animator = null;
+                    }
+                });
+                animator.start();
+            }
+            setVisibility(visibility);
+        } else if (visibility != View.VISIBLE && (getVisibility() == View.VISIBLE || animator != null)) {
+            if (animator != null)
+                animator.cancel();
+            if (outAnim == null) {
+                setVisibility(visibility);
+                return null;
+            }
+            animator = outAnim;
+            animator.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator a) {
+                    if (((ValueAnimator) a).getAnimatedFraction() == 1)
+                        setVisibility(visibility);
+                    a.removeListener(this);
+                    animator = null;
+                }
+
+                @Override
+                public void onAnimationCancel(Animator a) {
+                    a.removeListener(this);
+                    animator = null;
+                }
+            });
+            animator.start();
+        } else {
+            setVisibility(visibility);
+        }
+        return animator;
+    }
+
+    public Animator getAnimator() {
+        return animator;
+    }
+
+    public Animator getOutAnimator() {
+        return outAnim;
+    }
+
+    public void setOutAnimator(Animator outAnim) {
+        if (this.outAnim != null)
+            this.outAnim.setTarget(null);
+        this.outAnim = outAnim;
+        if (outAnim != null)
+            outAnim.setTarget(this);
+    }
+
+    public Animator getInAnimator() {
+        return inAnim;
+    }
+
+    public void setInAnimator(Animator inAnim) {
+        if (this.inAnim != null)
+            this.inAnim.setTarget(null);
+        this.inAnim = inAnim;
+        if (inAnim != null)
+            inAnim.setTarget(this);
+    }
+
+
+    // -------------------------------
+    // ViewGroup utils
+    // -------------------------------
+
+    List<View> views = new ArrayList<>();
+
+    public List<View> getViews() {
+        views.clear();
+        for (int i = 0; i < getChildCount(); i++)
+            views.add(getChildAt(i));
+        return views;
+    }
+
+    public void setOnDispatchTouchListener(OnTouchListener onDispatchTouchListener) {
+        this.onDispatchTouchListener = onDispatchTouchListener;
+    }
+
 
     // -------------------------------
     // tint
@@ -349,34 +1220,29 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     ColorStateList backgroundTint;
     PorterDuff.Mode backgroundTintMode;
     boolean animateColorChanges;
-    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateTint();
-            ViewCompat.postInvalidateOnAnimation(RecyclerView.this);
-        }
+    ValueAnimator.AnimatorUpdateListener tintAnimatorListener = animation -> {
+        updateTint();
+        ViewCompat.postInvalidateOnAnimation(this);
     };
-    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = new ValueAnimator.AnimatorUpdateListener() {
-        @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            updateBackgroundTint();
-            ViewCompat.postInvalidateOnAnimation(RecyclerView.this);
+    ValueAnimator.AnimatorUpdateListener backgroundTintAnimatorListener = animation -> {
+        Drawable background = getBackground();
+        if (background instanceof RippleDrawable)
+            background = ((RippleDrawable) background).getBackground();
+        if (background != null && backgroundTint != null && backgroundTintMode != null) {
+            background.setColorFilter(new PorterDuffColorFilter(backgroundTint.getColorForState(background.getState(), backgroundTint.getDefaultColor()), backgroundTintMode));
+            ViewCompat.postInvalidateOnAnimation(this);
         }
     };
 
     @Override
-    public void setTint(ColorStateList list) {
-        this.tint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
+    public void setTintList(ColorStateList list) {
+        this.tint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, tintAnimatorListener) : list;
         updateTint();
     }
 
     @Override
     public void setTint(int color) {
-        if (color == 0) {
-            setTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setTint(ColorStateList.valueOf(color));
-        }
+        setTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -384,7 +1250,7 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
         return tint;
     }
 
-    private void updateTint() {
+    protected void updateTint() {
         if (tint == null)
             return;
         int color = tint.getColorForState(getDrawableState(), tint.getDefaultColor());
@@ -396,7 +1262,6 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
             topGlow.setColor(color);
         if (bottomGlow != null)
             bottomGlow.setColor(color);
-        scrollBarDrawable = null;
     }
 
     @Override
@@ -411,18 +1276,14 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     }
 
     @Override
-    public void setBackgroundTint(ColorStateList list) {
-        this.backgroundTint = animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
+    public void setBackgroundTintList(ColorStateList list) {
+        this.backgroundTint = list == null ? null : animateColorChanges && !(list instanceof AnimatedColorStateList) ? AnimatedColorStateList.fromList(list, backgroundTintAnimatorListener) : list;
         updateBackgroundTint();
     }
 
     @Override
     public void setBackgroundTint(int color) {
-        if (color == 0) {
-            setBackgroundTint(new DefaultPrimaryColorStateList(getContext()));
-        } else {
-            setBackgroundTint(ColorStateList.valueOf(color));
-        }
+        setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     @Override
@@ -431,18 +1292,24 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     }
 
     private void updateBackgroundTint() {
-        if (getBackground() == null)
+        Drawable background = getBackground();
+        if (background instanceof RippleDrawable)
+            background = ((RippleDrawable) background).getBackground();
+        if (background == null)
             return;
+
         if (backgroundTint != null && backgroundTintMode != null) {
-            int color = backgroundTint.getColorForState(getDrawableState(), backgroundTint.getDefaultColor());
-            getBackground().setColorFilter(new PorterDuffColorFilter(color, tintMode));
+            Carbon.setTintListMode(background, backgroundTint, backgroundTintMode);
         } else {
-            getBackground().setColorFilter(null);
+            Carbon.clearTint(background);
         }
+
+        if (background.isStateful())
+            background.setState(getDrawableState());
     }
 
     @Override
-    public void setBackgroundTintMode(@NonNull PorterDuff.Mode mode) {
+    public void setBackgroundTintMode(@Nullable PorterDuff.Mode mode) {
         this.backgroundTintMode = mode;
         updateBackgroundTint();
     }
@@ -457,350 +1324,100 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     }
 
     public void setAnimateColorChangesEnabled(boolean animateColorChanges) {
+        if (this.animateColorChanges == animateColorChanges)
+            return;
         this.animateColorChanges = animateColorChanges;
-        if (tint != null && !(tint instanceof AnimatedColorStateList))
-            setTint(AnimatedColorStateList.fromList(tint, tintAnimatorListener));
-        if (backgroundTint != null && !(backgroundTint instanceof AnimatedColorStateList))
-            setBackgroundTint(AnimatedColorStateList.fromList(backgroundTint, backgroundTintAnimatorListener));
+        setTintList(tint);
+        setBackgroundTintList(backgroundTint);
     }
 
 
     // -------------------------------
-    // scroll bars
+    // stroke
     // -------------------------------
 
-    Drawable scrollBarDrawable;
+    private ColorStateList stroke;
+    private float strokeWidth;
+    private Paint strokePaint;
 
-    private void initScrollbars() {
-        try {
-            Field mScrollCacheField = View.class.getDeclaredField("mScrollCache");
-            mScrollCacheField.setAccessible(true);
-            Object mScrollCache = mScrollCacheField.get(this);
-
-            if (mScrollCache == null)
-                return;
-
-            Field scrollBarField = mScrollCache.getClass().getDeclaredField("scrollBar");
-            scrollBarField.setAccessible(true);
-            Object scrollBar = scrollBarField.get(mScrollCache);
-
-            Field mVerticalThumbField = scrollBar.getClass().getDeclaredField("mVerticalThumb");
-            mVerticalThumbField.setAccessible(true);
-            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
-            mVerticalThumbField.set(scrollBar, scrollBarDrawable);
-
-            Field mHorizontalThumbField = scrollBar.getClass().getDeclaredField("mHorizontalThumb");
-            mHorizontalThumbField.setAccessible(true);
-            scrollBarDrawable = new RectDrawable(tint != null ? tint.getColorForState(getDrawableState(), tint.getDefaultColor()) : Color.WHITE);
-            mHorizontalThumbField.set(scrollBar, scrollBarDrawable);
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    // -------------------------------
-    // header (do not copy)
-    // -------------------------------
-
-    View header;
-    private float parallax = 0.5f;
-    private int headerPadding = 0;
-    private int headerTint = 0;
-    private int minHeader = 0;
-
-    protected void dispatchDrawWithHeader(Canvas canvas) {
-        if (header != null) {
-            int saveCount = canvas.save(Canvas.CLIP_SAVE_FLAG | Canvas.MATRIX_SAVE_FLAG);
-            int headerHeight = header.getMeasuredHeight();
-            float scroll = computeVerticalScrollOffset();
-            canvas.clipRect(0, 0, getWidth(), Math.max(minHeader, headerHeight - scroll));
-            canvas.translate(0, -scroll * parallax);
-            header.draw(canvas);
-
-            if (headerTint != 0) {
-                paint.setColor(headerTint);
-                paint.setAlpha((int) (Color.alpha(headerTint) * Math.min(headerHeight - minHeader, scroll) / (headerHeight - minHeader)));
-                canvas.drawRect(0, 0, getWidth(), Math.max(minHeader + scroll, headerHeight), paint);
-            }
-            canvas.restoreToCount(saveCount);
-
-            saveCount = canvas.save(Canvas.CLIP_SAVE_FLAG);
-            canvas.clipRect(0, Math.max(minHeader, headerHeight - scroll), getWidth(), Integer.MAX_VALUE);
-            super.dispatchDraw(canvas);
-            canvas.restoreToCount(saveCount);
-        } else {
-            super.dispatchDraw(canvas);
-        }
-        if (topGlow != null) {
-            final int scrollY = computeVerticalScrollOffset();
-            if (!topGlow.isFinished()) {
-                final int restoreCount = canvas.save();
-                final int width = getWidth() - getPaddingLeft() - getPaddingRight();
-
-                canvas.translate(getPaddingLeft(), Math.min(0, scrollY));
-                topGlow.setSize(width, getHeight());
-                if (topGlow.draw(canvas)) {
-                    postInvalidate();
-                }
-                canvas.restoreToCount(restoreCount);
-            }
-            if (!bottomGlow.isFinished()) {
-                final int restoreCount = canvas.save();
-                final int width = getWidth() - getPaddingLeft() - getPaddingRight();
-                final int height = getHeight();
-
-                canvas.translate(-width + getPaddingLeft(),
-                        height);
-                canvas.rotate(180, width, 0);
-                bottomGlow.setSize(width, height);
-                if (bottomGlow.draw(canvas)) {
-                    postInvalidate();
-                }
-                canvas.restoreToCount(restoreCount);
-            }
-        }
-    }
-
-    public View getHeader() {
-        return header;
-    }
-
-    public void setHeader(View view) {
-        header = view;
-        view.setLayoutParams(generateDefaultLayoutParams());
-        requestLayout();
-    }
-
-    public void setHeader(int resId) {
-        header = LayoutInflater.from(getContext()).inflate(resId, this, false);
-        requestLayout();
-    }
-
-    public float getHeaderParallax() {
-        return parallax;
-    }
-
-    public void setHeaderParallax(float amount) {
-        parallax = amount;
-    }
-
-    public int getHeaderTint() {
-        return headerTint;
-    }
-
-    public void setHeaderTint(int color) {
-        headerTint = color;
-    }
-
-    public int getHeaderMinHeight() {
-        return minHeader;
-    }
-
-    public void setHeaderMinHeight(int height) {
-        minHeader = height;
-    }
-
-    /**
-     * @return parallax amount to the header applied when scrolling
-     * @deprecated Naming convention change. Use {@link #getHeaderParallax()} instead
-     */
-    @Deprecated
-    public float getParallax() {
-        return parallax;
-    }
-
-    /**
-     * @param amount parallax amount to apply to the header
-     * @deprecated Naming convention change. Use {@link #setHeaderParallax(float)} instead
-     */
-    @Deprecated
-    public void setParallax(float amount) {
-        parallax = amount;
-    }
-
-    /**
-     * @return min header height
-     * @deprecated Naming convention change. Use {@link #getHeaderMinHeight()} instead
-     */
-    @Deprecated
-    public int getMinHeaderHeight() {
-        return minHeader;
-    }
-
-    /**
-     * @param height min header height
-     * @deprecated Naming convention change. Use {@link #setHeaderMinHeight(int)} instead
-     */
-    @Deprecated
-    public void setMinHeaderHeight(int height) {
-        minHeader = height;
-    }
-
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int paddingTop = getPaddingTop() - headerPadding;
-        if (header != null) {
-            measureChildWithMargins(header, widthMeasureSpec, 0, heightMeasureSpec, 0);
-            headerPadding = header.getMeasuredHeight();
-        } else {
-            headerPadding = 0;
-        }
-        setPadding(getPaddingLeft(), paddingTop + headerPadding, getPaddingRight(), getPaddingBottom());
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    private void drawStroke(Canvas canvas) {
+        strokePaint.setStrokeWidth(strokeWidth * 2);
+        strokePaint.setColor(stroke.getColorForState(getDrawableState(), stroke.getDefaultColor()));
+        cornersMask.setFillType(Path.FillType.WINDING);
+        canvas.drawPath(cornersMask, strokePaint);
     }
 
     @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        super.onLayout(changed, l, t, r, b);
-        if (header != null)
-            header.layout(0, 0, getWidth(), header.getMeasuredHeight());
+    public void setStroke(ColorStateList colorStateList) {
+        stroke = colorStateList;
+
+        if (stroke == null)
+            return;
+
+        if (strokePaint == null) {
+            strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+        }
     }
 
-    public static abstract class ListAdapter<VH extends ViewHolder, I> extends android.support.v7.widget.RecyclerView.Adapter<VH> {
-        public ListAdapter() {
-            items = new ArrayList<>();
-        }
-
-        public ListAdapter(List<I> items) {
-            this.items = items;
-        }
-
-        protected List<I> items;
-
-        public I getItem(int position) {
-            return items.get(position);
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.size();
-        }
-
-        public void setItems(@NonNull List<I> items) {
-            this.items = items;
-        }
-
-        public List<I> getItems() {
-            return items;
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
+    @Override
+    public void setStroke(int color) {
+        setStroke(ColorStateList.valueOf(color));
     }
 
-    public static abstract class ArrayAdapter<VH extends ViewHolder, I> extends android.support.v7.widget.RecyclerView.Adapter<VH> {
-        public ArrayAdapter() {
-            items = (I[]) new Object[0];    // doesn't really matter
-        }
-
-        public ArrayAdapter(I[] items) {
-            this.items = items;
-        }
-
-        protected I[] items;
-
-        public I getItem(int position) {
-            return items[position];
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.length;
-        }
-
-        public void setItems(@NonNull I[] items) {
-            this.items = items;
-        }
-
-        public I[] getItems() {
-            return items;
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
+    @Override
+    public ColorStateList getStroke() {
+        return stroke;
     }
 
-    public static class DividerItemDecoration extends RecyclerView.ItemDecoration {
+    @Override
+    public void setStrokeWidth(float strokeWidth) {
+        this.strokeWidth = strokeWidth;
+    }
 
-        private Drawable drawable;
-        private int height;
+    @Override
+    public float getStrokeWidth() {
+        return strokeWidth;
+    }
 
-        public DividerItemDecoration(Drawable drawable, int height) {
-            this.drawable = drawable;
-            this.height = height;
-        }
 
-        @Override
-        public void getItemOffsets(Rect outRect, View view, android.support.v7.widget.RecyclerView parent, State state) {
-            super.getItemOffsets(outRect, view, parent, state);
-            if (drawable == null)
-                return;
-            if (parent.getChildPosition(view) < 1)
-                return;
+    // -------------------------------
+    // maximum width & height
+    // -------------------------------
 
-            if (getOrientation(parent) == LinearLayoutManager.VERTICAL) {
-                outRect.top = height;
-            } else {
-                outRect.left = height;
-            }
-        }
+    int maxWidth = Integer.MAX_VALUE, maxHeight = Integer.MAX_VALUE;
 
-        @Override
-        public void onDrawOver(Canvas c, android.support.v7.widget.RecyclerView parent, State state) {
-            if (drawable == null) {
-                super.onDrawOver(c, parent, state);
-                return;
-            }
+    @Override
+    public int getMaxWidth() {
+        return maxWidth;
+    }
 
-            // Initialization needed to avoid compiler warning
-            int left = 0, right = 0, top = 0, bottom = 0;
-            int orientation = getOrientation(parent);
-            int childCount = parent.getChildCount();
+    @Override
+    public void setMaxWidth(int maxWidth) {
+        this.maxWidth = maxWidth;
+        requestLayout();
+    }
 
-            if (orientation == LinearLayoutManager.VERTICAL) {
-                left = parent.getPaddingLeft();
-                right = parent.getWidth() - parent.getPaddingRight();
-            } else { //horizontal
-                top = parent.getPaddingTop();
-                bottom = parent.getHeight() - parent.getPaddingBottom();
-            }
+    @Override
+    public int getMaxHeight() {
+        return maxHeight;
+    }
 
-            for (int i = 1; i < childCount; i++) {
-                View child = parent.getChildAt(i);
-                RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) child.getLayoutParams();
+    @Override
+    public void setMaxHeight(int maxHeight) {
+        this.maxHeight = maxHeight;
+        requestLayout();
+    }
 
-                if (orientation == LinearLayoutManager.VERTICAL) {
-                    bottom = (int) (child.getTop() - params.topMargin + ViewHelper.getTranslationY(child));
-                    top = bottom - height;
-                } else { //horizontal
-                    right = (int) (child.getLeft() - params.leftMargin + ViewHelper.getTranslationX(child));
-                    left = right - height;
-                }
-                c.save(Canvas.CLIP_SAVE_FLAG);
-                c.clipRect(left, top, right, bottom);
-                drawable.setAlpha((int) (ViewHelper.getAlpha(child) * 255));
-                drawable.setBounds(left, top, right, bottom);
-                drawable.draw(c);
-                c.restore();
-            }
-        }
-
-        private int getOrientation(android.support.v7.widget.RecyclerView parent) {
-            if (parent.getLayoutManager() instanceof LinearLayoutManager) {
-                LinearLayoutManager layoutManager = (LinearLayoutManager) parent.getLayoutManager();
-                return layoutManager.getOrientation();
-            } else {
-                throw new IllegalStateException(
-                        "DividerItemDecoration can only be used with a LinearLayoutManager.");
-            }
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (getMeasuredWidth() > maxWidth || getMeasuredHeight() > maxHeight) {
+            if (getMeasuredWidth() > maxWidth)
+                widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.EXACTLY);
+            if (getMeasuredHeight() > maxHeight)
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.EXACTLY);
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
     }
 
@@ -809,147 +1426,132 @@ public class RecyclerView extends android.support.v7.widget.RecyclerView impleme
     // transformations
     // -------------------------------
 
-    public float getAlpha() {
-        return NEEDS_PROXY ? wrap(this).getAlpha() : super.getAlpha();
+    List<OnTransformationChangedListener> transformationChangedListeners = new ArrayList<>();
+
+    public void addOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.add(listener);
     }
 
-    public void setAlpha(float alpha) {
-        if (NEEDS_PROXY) {
-            wrap(this).setAlpha(alpha);
-        } else {
-            super.setAlpha(alpha);
-        }
+    public void removeOnTransformationChangedListener(OnTransformationChangedListener listener) {
+        transformationChangedListeners.remove(listener);
     }
 
-    public float getPivotX() {
-        return NEEDS_PROXY ? wrap(this).getPivotX() : super.getPivotX();
+    public void clearOnTransformationChangedListeners() {
+        transformationChangedListeners.clear();
     }
 
-    public void setPivotX(float pivotX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotX(pivotX);
-        } else {
-            super.setPivotX(pivotX);
-        }
+    private void fireOnTransformationChangedListener() {
+        if (transformationChangedListeners == null)
+            return;
+        for (OnTransformationChangedListener listener : transformationChangedListeners)
+            listener.onTransformationChanged();
     }
 
-    public float getPivotY() {
-        return NEEDS_PROXY ? wrap(this).getPivotY() : super.getPivotY();
-    }
-
-    public void setPivotY(float pivotY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setPivotY(pivotY);
-        } else {
-            super.setPivotY(pivotY);
-        }
-    }
-
-    public float getRotation() {
-        return NEEDS_PROXY ? wrap(this).getRotation() : super.getRotation();
-    }
-
+    @Override
     public void setRotation(float rotation) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotation(rotation);
-        } else {
-            super.setRotation(rotation);
-        }
+        super.setRotation(rotation);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getRotationX() {
-        return NEEDS_PROXY ? wrap(this).getRotationX() : super.getRotationX();
-    }
-
-    public void setRotationX(float rotationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationX(rotationX);
-        } else {
-            super.setRotationX(rotationX);
-        }
-    }
-
-    public float getRotationY() {
-        return NEEDS_PROXY ? wrap(this).getRotationY() : super.getRotationY();
-    }
-
+    @Override
     public void setRotationY(float rotationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setRotationY(rotationY);
-        } else {
-            super.setRotationY(rotationY);
-        }
+        super.setRotationY(rotationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleX() {
-        return NEEDS_PROXY ? wrap(this).getScaleX() : super.getScaleX();
+    @Override
+    public void setRotationX(float rotationX) {
+        super.setRotationX(rotationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
     public void setScaleX(float scaleX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleX(scaleX);
-        } else {
-            super.setScaleX(scaleX);
-        }
+        super.setScaleX(scaleX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getScaleY() {
-        return NEEDS_PROXY ? wrap(this).getScaleY() : super.getScaleY();
-    }
-
+    @Override
     public void setScaleY(float scaleY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setScaleY(scaleY);
-        } else {
-            super.setScaleY(scaleY);
-        }
+        super.setScaleY(scaleY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationX() {
-        return NEEDS_PROXY ? wrap(this).getTranslationX() : super.getTranslationX();
+    @Override
+    public void setPivotX(float pivotX) {
+        super.setPivotX(pivotX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
+    @Override
+    public void setPivotY(float pivotY) {
+        super.setPivotY(pivotY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
+    public void setAlpha(@FloatRange(from = 0.0, to = 1.0) float alpha) {
+        super.setAlpha(alpha);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    @Override
     public void setTranslationX(float translationX) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationX(translationX);
-        } else {
-            super.setTranslationX(translationX);
-        }
+        super.setTranslationX(translationX);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
     }
 
-    public float getTranslationY() {
-        return NEEDS_PROXY ? wrap(this).getTranslationY() : super.getTranslationY();
-    }
-
+    @Override
     public void setTranslationY(float translationY) {
-        if (NEEDS_PROXY) {
-            wrap(this).setTranslationY(translationY);
+        super.setTranslationY(translationY);
+        invalidateParentIfNeeded();
+        fireOnTransformationChangedListener();
+    }
+
+    public void setWidth(int width) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
         } else {
-            super.setTranslationY(translationY);
+            layoutParams.width = width;
+            setLayoutParams(layoutParams);
         }
     }
 
-    public float getX() {
-        return NEEDS_PROXY ? wrap(this).getX() : super.getX();
-    }
-
-    public void setX(float x) {
-        if (NEEDS_PROXY) {
-            wrap(this).setX(x);
+    public void setHeight(int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, height));
         } else {
-            super.setX(x);
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
         }
     }
 
-    public float getY() {
-        return NEEDS_PROXY ? wrap(this).getY() : super.getY();
-    }
-
-    public void setY(float y) {
-        if (NEEDS_PROXY) {
-            wrap(this).setY(y);
+    public void setSize(int width, int height) {
+        ViewGroup.LayoutParams layoutParams = getLayoutParams();
+        if (layoutParams == null) {
+            setLayoutParams(new ViewGroup.LayoutParams(width, height));
         } else {
-            super.setY(y);
+            layoutParams.width = width;
+            layoutParams.height = height;
+            setLayoutParams(layoutParams);
         }
     }
+
+    public void setBounds(int x, int y, int width, int height) {
+        setSize(width, height);
+        setTranslationX(x);
+        setTranslationY(y);
+    }
+
 }

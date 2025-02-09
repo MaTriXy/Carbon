@@ -1,40 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<carbon.widget.LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-                            xmlns:app="http://schemas.android.com/apk/res-auto"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layoutDirection="locale"
-                            android:orientation="horizontal"
-                            android:paddingLeft="@dimen/carbon_windowPadding"
-                            android:paddingRight="@dimen/carbon_windowPadding"
-                            app:carbon_rippleColor="?attr/carbon_rippleColor">
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <carbon.widget.TextView
-        android:id="@+id/text"
-        android:layout_width="wrap_content"
-        android:layout_height="@dimen/carbon_listItemHeight"
-        android:layout_weight="1"
-        android:gravity="center_vertical"
-        android:text="Row"/>
+    <data>
 
-    <carbon.widget.TextView
-        android:id="@+id/beta"
-        android:layout_width="wrap_content"
-        android:layout_height="@dimen/carbon_listItemHeight"
-        android:gravity="center_vertical"
-        android:paddingLeft="@dimen/carbon_padding"
-        android:text="beta"
-        android:textColor="#ffcf0000"
-        android:textSize="16sp"/>
+        <variable
+            name="data"
+            type="tk.zielony.carbonsamples.SampleActivityGroup" />
 
-    <carbon.widget.TextView
-        android:id="@+id/lollipop"
-        android:layout_width="wrap_content"
-        android:layout_height="@dimen/carbon_listItemHeight"
-        android:gravity="center_vertical"
-        android:paddingLeft="@dimen/carbon_padding"
-        android:text="Lollipop"
-        android:textColor="#ff7f00ff"
-        android:textSize="16sp"/>
+        <import type="android.view.View" />
+    </data>
 
-</carbon.widget.LinearLayout>
+    <carbon.widget.FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        android:layoutDirection="locale"
+        android:orientation="horizontal"
+        app:carbon_rippleColor="?attr/carbon_rippleColor">
+
+        <carbon.widget.ImageView
+            style="@style/carbon_ImageView.Icon"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="@dimen/carbon_windowPadding"
+            android:layout_marginLeft="@dimen/carbon_windowPadding"
+            android:src="@{data.icon!=0?context.getResources().getDrawable(data.icon):null}"
+            tools:src="@drawable/ic_android_black_24dp" />
+
+        <carbon.widget.TextView
+            android:id="@+id/text"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/carbon_listItemHeight"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:paddingStart="@dimen/carbon_contentSpace"
+            android:paddingLeft="@dimen/carbon_contentSpace"
+            android:paddingEnd="@dimen/carbon_windowPadding"
+            android:paddingRight="@dimen/carbon_windowPadding"
+            android:text="@{context.getString(data.name)}"
+            tools:text="item name" />
+
+    </carbon.widget.FrameLayout>
+</layout>

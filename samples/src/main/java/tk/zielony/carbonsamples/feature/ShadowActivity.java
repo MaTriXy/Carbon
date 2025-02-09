@@ -1,21 +1,17 @@
 package tk.zielony.carbonsamples.feature;
 
-import android.app.Activity;
 import android.os.Bundle;
 
-import com.nineoldandroids.animation.ValueAnimator;
-
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2014-12-15.
- */
-public class ShadowActivity extends Activity {
-    ValueAnimator animator;
-
+@SampleAnnotation(layoutId = R.layout.activity_shadow, titleId = R.string.shadowActivity_title)
+public class ShadowActivity extends ThemedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_shadow);
+
+        initToolbar();
     }
 }

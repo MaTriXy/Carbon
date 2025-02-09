@@ -1,103 +1,237 @@
 package carbon.widget;
 
 import android.content.Context;
-import android.support.v7.view.menu.MenuBuilder;
-import android.support.v7.widget.LinearLayoutManager;
+import android.content.res.ColorStateList;
+import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
-import carbon.CarbonContextWrapper;
-import carbon.R;
+import androidx.annotation.AttrRes;
+import androidx.annotation.StyleRes;
+import androidx.core.view.MenuItemCompat;
 
-/**
- * Created by Marcin on 2015-06-25.
- */
+import com.annimon.stream.Stream;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import carbon.Carbon;
+import carbon.R;
+import carbon.component.Component;
+import carbon.component.LayoutComponent;
+import carbon.recycler.RowFactory;
+import carbon.recycler.RowListAdapter;
+import carbon.recycler.ViewItemDecoration;
+
 public class NavigationView extends RecyclerView {
-    private Menu menu;
+    public static class Item implements Serializable {
+        int id;
+        private Drawable icon;
+        private ColorStateList tint;
+        private int groupId;
+        private CharSequence title;
+
+        public Item() {
+        }
+
+        public Item(int id, Drawable icon, CharSequence title) {
+            this.id = id;
+            this.icon = icon;
+            this.title = title;
+        }
+
+        public Item(MenuItem item) {
+            id = item.getItemId();
+            icon = item.getIcon();
+            tint = MenuItemCompat.getIconTintList(item);
+            groupId = item.getGroupId();
+            title = item.getTitle();
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public void setId(int id) {
+            this.id = id;
+        }
+
+        public void setIcon(Drawable icon) {
+            this.icon = icon;
+        }
+
+        public Drawable getIcon() {
+            return icon;
+        }
+
+        public void setIconTintList(ColorStateList tint) {
+            this.tint = tint;
+        }
+
+        public ColorStateList getIconTintList() {
+            return tint;
+        }
+
+        public int getGroupId() {
+            return groupId;
+        }
+
+        public void setTitle(CharSequence title) {
+            this.title = title;
+        }
+
+        public CharSequence getTitle() {
+            return title;
+        }
+    }
+
+    private static class ItemComponent extends LayoutComponent<Item> {
+
+        private ImageView carbonItemIcon = getView().findViewById(R.id.carbon_itemIcon);
+        private Label carbonItemText = getView().findViewById(R.id.carbon_itemText);
+
+        ItemComponent(ViewGroup parent) {
+            super(parent, R.layout.carbon_navigation_row);
+        }
+
+        @Override
+        public void bind(Item data) {
+            carbonItemIcon.setImageDrawable(data.icon);
+            carbonItemIcon.setTintList(data.getIconTintList());
+            carbonItemText.setText(data.title);
+        }
+    }
+
+    private OnItemClickedListener onItemClickedListener;
+    private Item[] items;
+    private View header;
+    private RowFactory<Item> itemFactory;
+
+    private static class CustomHeaderItem implements Serializable {
+    }
+
+    private static class CustomHeaderRow extends Component<CustomHeaderItem> {
+
+        CustomHeaderRow(View view) {
+            this.view = view;
+        }
+    }
 
     public NavigationView(Context context) {
         super(context);
-        initNavigationView();
+        initNavigationView(null, R.attr.carbon_navigationViewStyle, R.style.carbon_NavigationView);
     }
 
     public NavigationView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        initNavigationView();
+        initNavigationView(attrs, R.attr.carbon_navigationViewStyle, R.style.carbon_NavigationView);
     }
 
-    public NavigationView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public NavigationView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initNavigationView();
+        initNavigationView(attrs, defStyleAttr, R.style.carbon_NavigationView);
     }
 
-    private void initNavigationView() {
-        setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.VERTICAL, false));
+    public NavigationView(Context context, AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        super(context, attrs, defStyleAttr);
+        initNavigationView(attrs, defStyleAttr, defStyleRes);
+    }
+
+    private void initNavigationView(AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
+        setLayoutManager(new LinearLayoutManager(getContext()));
+
+        TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.NavigationView, defStyleAttr, defStyleRes);
+
+        itemFactory = ItemComponent::new;
+        int menuId = a.getResourceId(R.styleable.NavigationView_carbon_menu, 0);
+        if (menuId != 0)
+            setMenu(menuId);
+
+        a.recycle();
+    }
+
+    public void setOnItemClickedListener(OnItemClickedListener<android.view.MenuItem> onItemClickedListener) {
+        this.onItemClickedListener = onItemClickedListener;
     }
 
     public void setMenu(int resId) {
-        Menu menu = new MenuBuilder(new CarbonContextWrapper(getContext()));
-        MenuInflater inflater = new MenuInflater(getContext());
-        inflater.inflate(resId, menu);
-        setMenu(menu);
+        setMenu(Carbon.getMenu(getContext(), resId));
     }
 
-    public void setMenu(Menu menu) {
-        this.menu = menu;
-        if (getAdapter() == null) {
-            setAdapter(new Adapter());
+    public void setMenu(android.view.Menu menu) {
+        ArrayList<Serializable> items = new ArrayList<>();
+        for (int i = 0; i < menu.size(); i++) {
+            if (menu.getItem(i).isVisible())
+                items.add(new Item(menu.getItem(i)));
         }
-        ((Adapter) getAdapter()).setItems(menu);
+
+        this.items = Stream.of(items).toArray(Item[]::new);
+
+        initItems();
     }
 
-    public Menu getMenu() {
-        return menu;
+    private void initItems() {
+        if (items == null)
+            return;
+
+        RowListAdapter<Serializable> adapter = new RowListAdapter<>(Item.class, itemFactory);
+        adapter.putFactory(CustomHeaderItem.class, parent -> new CustomHeaderRow(header));
+        adapter.setOnItemClickedListener(Item.class, (view, menuItem, position) -> {
+            if (onItemClickedListener != null)
+                onItemClickedListener.onItemClicked(view, menuItem, position);
+        });
+
+        List<Serializable> items = new ArrayList<>(Arrays.asList(this.items));
+
+        for (int i = 0; i < getItemDecorationCount(); i++)
+            removeItemDecorationAt(0);
+
+        ViewItemDecoration dividerItemDecoration = new ViewItemDecoration(getContext(), R.layout.carbon_menustrip_hseparator_item);
+        dividerItemDecoration.setDrawAfter(position -> position < items.size() - 1 &&
+                items.get(position) instanceof Item &&
+                items.get(position + 1) instanceof Item &&
+                ((Item) items.get(position)).getGroupId() != ((Item) items.get(position + 1)).getGroupId());
+        addItemDecoration(dividerItemDecoration);
+
+        ViewItemDecoration paddingItemDecoration = new ViewItemDecoration(getContext(), R.layout.carbon_row_padding);
+        paddingItemDecoration.setDrawBefore(position -> position == 0);
+        paddingItemDecoration.setDrawAfter(position -> position == items.size() - 1);
+        addItemDecoration(paddingItemDecoration);
+
+        if (header != null) {
+            items.add(0, new CustomHeaderItem());
+        }
+
+        adapter.setItems(items);
+        setAdapter(adapter);
     }
 
-    public static class Adapter extends RecyclerView.Adapter<ViewHolder> {
+    public void setMenuItems(Item[] items) {
+        this.items = items;
 
-        private Menu items = null;
-
-        public MenuItem getItem(int position) {
-            return items.getItem(position);
-        }
-
-        @Override
-        public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            LayoutInflater inflater = LayoutInflater.from(parent.getContext());
-            View view = inflater.inflate(R.layout.carbon_navigation_row, parent, false);
-            return new ViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(ViewHolder holder, final int position) {
-            holder.tv.setText(items.getItem(position).getTitle());
-            holder.iv.setImageDrawable(items.getItem(position).getIcon());
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.size();
-        }
-
-        public void setItems(Menu items) {
-            this.items = items;
-            notifyDataSetChanged();
-        }
+        initItems();
     }
 
-    public static class ViewHolder extends RecyclerView.ViewHolder {
-        TextView tv;
-        ImageView iv;
+    public Item[] getMenuItems() {
+        return items;
+    }
 
-        public ViewHolder(View itemView) {
-            super(itemView);
-            tv = (TextView) itemView.findViewById(R.id.carbon_itemText);
-            iv = (ImageView) itemView.findViewById(R.id.carbon_itemIcon);
-        }
+    public void setHeader(View header) {
+        this.header = header;
+        initItems();
+    }
+
+    @Deprecated
+    public void setItemLayout(int itemLayoutId) {
+    }
+
+    public void setItemFactory(RowFactory<Item> factory) {
+        this.itemFactory = factory;
+        initItems();
     }
 }

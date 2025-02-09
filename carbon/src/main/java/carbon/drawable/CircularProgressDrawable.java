@@ -9,12 +9,11 @@ import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 
-import carbon.widget.ProgressBar;
+import androidx.core.graphics.drawable.TintAwareDrawable;
 
-/**
- * Created by Mbarin on 2015-02-08.
- */
-public class CircularProgressDrawable extends ProgressDrawable {
+import carbon.widget.ProgressView;
+
+public class CircularProgressDrawable extends ProgressDrawable implements TintAwareDrawable {
     private static final long DEFAULT_SWEEP_DURATION = 3000;
     private static final long DEFAULT_ANGLE_DURATION = 1000;
     private long sweepDuration = DEFAULT_SWEEP_DURATION;
@@ -28,13 +27,23 @@ public class CircularProgressDrawable extends ProgressDrawable {
     }
 
     @Override
+    public int getMinimumWidth() {
+        return (int) getBarWidth() * 2;
+    }
+
+    @Override
+    public int getMinimumHeight() {
+        return (int) getBarWidth() * 2;
+    }
+
+    @Override
     public void draw(Canvas canvas) {
         Rect bounds = getBounds();
         forePaint.setStrokeWidth(width);
         RectF boundsF = new RectF(bounds);
         boundsF.inset(width / 2 + barPadding + 0.1f, width / 2 + barPadding + 0.1f);
 
-        if (style != ProgressBar.Style.CircularDeterminate) {
+        if (style != ProgressView.Style.CircularDeterminate) {
             long time = System.currentTimeMillis() - startTime;
             float t = (float) (time % angleDuration) / angleDuration;
             float t2 = (float) (time % sweepDuration) / sweepDuration;

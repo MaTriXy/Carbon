@@ -1,17 +1,17 @@
 package tk.zielony.carbonsamples.widget;
 
-import android.app.Activity;
 import android.os.Bundle;
 
+import tk.zielony.carbonsamples.SampleAnnotation;
 import tk.zielony.carbonsamples.R;
+import tk.zielony.carbonsamples.ThemedActivity;
 
-/**
- * Created by Marcin on 2014-12-15.
- */
-public class SVGActivity extends Activity {
+@SampleAnnotation(layoutId = R.layout.activity_svg, titleId = R.string.svgActivity_title)
+public class SVGActivity extends ThemedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_svg);
+
+        initToolbar();
     }
 }
